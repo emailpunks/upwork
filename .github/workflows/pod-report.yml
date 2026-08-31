@@ -1,0 +1,36 @@
+name: Pod reconciliation report
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: pod-report
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Generate report
+        run: python3 main.py
+        env:
+          UPWORK_CLIENT_ID: ${{ secrets.UPWORK_CLIENT_ID }}
+          UPWORK_CLIENT_SECRET: ${{ secrets.UPWORK_CLIENT_SECRET }}
+          UPWORK_REFRESH_TOKEN: ${{ secrets.UPWORK_REFRESH_TOKEN }}
+          UPWORK_ORGANIZATION_ID: ${{ secrets.UPWORK_ORGANIZATION_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+
+      - name: Deploy to Netlify
+        run: npx --yes netlify-cli deploy --prod --dir=output
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

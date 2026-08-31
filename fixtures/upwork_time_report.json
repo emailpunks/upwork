@@ -1,0 +1,47 @@
+[
+  {
+    "contractor_name": "Example Contractor",
+    "date": "2026-08-25",
+    "contract_id": "c1",
+    "task": "ES",
+    "task_description": "",
+    "memo": "",
+    "hours_worked": 1.0
+  },
+  {
+    "contractor_name": "Example Contractor",
+    "date": "2026-08-26",
+    "contract_id": "c1",
+    "task": "QA",
+    "task_description": "",
+    "memo": "",
+    "hours_worked": 1.0
+  },
+  {
+    "contractor_name": "Example Contractor",
+    "date": "2026-08-27",
+    "contract_id": "c1",
+    "task": "",
+    "task_description": "",
+    "memo": "Did some ES work today",
+    "hours_worked": 1.0
+  },
+  {
+    "contractor_name": "Example Contractor",
+    "date": "2026-08-28",
+    "contract_id": "c1",
+    "task": "QA",
+    "task_description": "",
+    "memo": "",
+    "hours_worked": 0.67
+  },
+  {
+    "contractor_name": "Example Contractor",
+    "date": "2026-08-30",
+    "contract_id": "c1",
+    "task": "ES",
+    "task_description": "",
+    "memo": "",
+    "hours_worked": 1.0
+  }
+]

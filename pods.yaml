@@ -1,0 +1,43 @@
+# Registry of pods this pipeline reconciles Upwork time submissions against
+# Notion task records for. Non-secret config only — Upwork/Notion tokens live
+# in pods.secrets.yaml (gitignored) for local runs, or GitHub Actions secrets
+# in CI (see README.md).
+#
+# One example pod is filled in below to show the shape. Replace it with the
+# real roster, or add more pods alongside it, whenever ready.
+#
+# - roles.<role>.task_codes maps the two-letter code a contractor logs
+#   against a task to its expected duration in minutes. A contractor's
+#   Upwork submission is checked against whichever code/duration their
+#   matching Notion task record carries — these are the known-good values a
+#   mismatch is measured against.
+# - contractors[].upwork_name must match `freelancer.name` exactly as
+#   returned by Upwork's timeReport API, since that's the only key available
+#   to tie a submission back to a contractor.
+# - brands[].notion_database_id is the Notion database this brand's tasks
+#   live in. notion_property_map lets each brand's database use its own
+#   property names (schemas aren't assumed to be uniform across brands).
+# - brands[].upwork_contract_ids scopes which Upwork contracts count toward
+#   this brand, since one pod can span several client-side contracts.
+
+pods:
+  - slug: pod-a
+    name: "Pod A"
+    brands:
+      - name: "Example Brand"
+        notion_database_id: "REPLACE_WITH_NOTION_DATABASE_ID"
+        notion_property_map:
+          contractor: "Assigned To"
+          task_code: "Task Code"
+          date: "Date"
+          duration_minutes: "Duration (min)"
+        upwork_contract_ids: []
+    contractors:
+      - name: "Example Contractor"
+        upwork_name: "Example Contractor"
+        role: designer
+    roles:
+      designer:
+        task_codes:
+          ES: { label: "Email send", minutes: 60 }
+          QA: { label: "QA pass", minutes: 40 }
