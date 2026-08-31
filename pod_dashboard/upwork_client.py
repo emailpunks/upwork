@@ -16,9 +16,6 @@ query TimeReport($filter: TimeReportFilter) {
     freelancer {
       name
     }
-    contract {
-      contractId
-    }
     task
     taskDescription
     memo
@@ -32,7 +29,6 @@ query TimeReport($filter: TimeReportFilter) {
 class TimeReportEntry:
     contractor_name: str
     date: str
-    contract_id: str
     task: str
     task_description: str
     memo: str
@@ -103,7 +99,6 @@ class UpworkClient:
                 TimeReportEntry(
                     contractor_name=(row.get("freelancer") or {}).get("name", ""),
                     date=row["dateWorkedOn"],
-                    contract_id=(row.get("contract") or {}).get("contractId", ""),
                     task=row.get("task") or "",
                     task_description=row.get("taskDescription") or "",
                     memo=row.get("memo") or "",
