@@ -102,6 +102,10 @@ def load_pods(path=PODS_YAML):
     with open(path) as f:
         raw = yaml.safe_load(f) or {}
 
+    # Roles (and their task codes) are shared across every pod, defined once
+    # at the top level rather than duplicated per pod.
+    roles = {name: _build_role(name, data) for name, data in (raw.get("roles") or {}).items()}
+
     pods = []
     for entry in raw.get("pods", []):
         try:
@@ -109,7 +113,6 @@ def load_pods(path=PODS_YAML):
         except KeyError as e:
             raise PodConfigError(f"pods.yaml entry {entry!r} is missing required field {e}")
 
-        roles = {name: _build_role(name, data) for name, data in (entry.get("roles") or {}).items()}
         contractors = [
             Contractor(name=c["name"], upwork_handle=c["upwork_handle"], role=c["role"])
             for c in entry.get("contractors", [])
@@ -120,7 +123,7 @@ def load_pods(path=PODS_YAML):
             if c.role not in roles:
                 raise PodConfigError(
                     f"pod {slug!r}: contractor {c.name!r} has role {c.role!r}, "
-                    f"which isn't defined in this pod's roles"
+                    f"which isn't defined in the top-level roles"
                 )
 
         pods.append(Pod(slug=slug, name=entry.get("name", slug), brands=brands, contractors=contractors, roles=roles))

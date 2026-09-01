@@ -3,25 +3,56 @@
 # pods.secrets.yaml (gitignored) for local runs, or a GitHub Actions secret in
 # CI (see README.md).
 #
-# One example pod is filled in below to show the shape. Replace it with the
-# real roster, or add more pods alongside it, whenever ready.
-#
 # - roles.<role>.task_codes maps the two-letter code a contractor logs
 #   against a task to its fixed expected duration in minutes. This is the
 #   only place duration comes from — Upwork submissions and Notion records
 #   are both just checked against it, neither is itself a source of truth
-#   for how long a code "should" take.
-# - contractors[].upwork_handle must match the handle Upwork shows in
+#   for how long a code "should" take. Roles are shared across every pod
+#   (a Designer's codes mean the same thing in every pod), not per-pod —
+#   define each role once here.
+# - pods[].contractors[].upwork_handle must match the handle Upwork shows in
 #   parentheses after a contractor's name in the timesheet CSV's "Talent"
 #   column (e.g. "Jane Doe (abc12de)" -> upwork_handle: "abc12de") — it's
 #   stable, unlike the display name.
-# - contractors[].name is how this contractor is identified in Notion
+# - pods[].contractors[].name is how this contractor is identified in Notion
 #   (whatever the "contractor" property in notion_property_map resolves to).
-# - brands[].notion_database_id is the Notion database this brand's
+# - pods[].brands[].notion_database_id is the Notion database this brand's
 #   completed-task log lives in. notion_property_map lets each brand's
 #   database use its own property names (schemas aren't assumed to be
 #   uniform across brands).
+#
+# task_codes labels are currently just the code itself as a placeholder
+# (only the code + minutes were available when this was filled in) — swap in
+# real descriptive labels whenever convenient, nothing functional depends on
+# them.
 
+roles:
+  coordinator:
+    task_codes:
+      HE: { label: "HE", minutes: 60 }
+      PE: { label: "PE", minutes: 40 }
+      SM: { label: "SM", minutes: 40 }
+      TM: { label: "TM", minutes: 10 }
+      DR: { label: "DR", minutes: 10 }
+  copywriter:
+    task_codes:
+      HE: { label: "HE", minutes: 60 }
+      PE: { label: "PE", minutes: 40 }
+      SM: { label: "SM", minutes: 20 }
+  designer:
+    task_codes:
+      HE: { label: "HE", minutes: 60 }
+      HF: { label: "HF", minutes: 30 }
+      SF: { label: "SF", minutes: 60 }
+  technician:
+    task_codes:
+      HE: { label: "HE", minutes: 20 }
+      PE: { label: "PE", minutes: 20 }
+      SM: { label: "SM", minutes: 20 }
+      HF: { label: "HF", minutes: 20 }
+
+# One example pod is filled in below to show the shape. Replace it with the
+# real roster, or add more pods alongside it, whenever ready.
 pods:
   - slug: pod-a
     name: "Pod A"
@@ -36,8 +67,3 @@ pods:
       - name: "Example Contractor"
         upwork_handle: "abc12de"
         role: designer
-    roles:
-      designer:
-        task_codes:
-          ES: { label: "Email send", minutes: 60 }
-          QA: { label: "QA pass", minutes: 40 }
