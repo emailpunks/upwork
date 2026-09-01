@@ -20,36 +20,30 @@
 #   completed-task log lives in. notion_property_map lets each brand's
 #   database use its own property names (schemas aren't assumed to be
 #   uniform across brands).
-#
-# task_codes labels are currently just the code itself as a placeholder
-# (only the code + minutes were available when this was filled in) — swap in
-# real descriptive labels whenever convenient, nothing functional depends on
-# them.
-
 roles:
   coordinator:
     task_codes:
-      HE: { label: "HE", minutes: 60 }
-      PE: { label: "PE", minutes: 40 }
-      SM: { label: "SM", minutes: 40 }
-      TM: { label: "TM", minutes: 10 }
-      DR: { label: "DR", minutes: 10 }
+      HE: { label: "Ticket Building + Creative QA + Build QA", minutes: 60 }
+      PE: { label: "Ticket Building + Build QA", minutes: 40 }
+      SM: { label: "Ticket Building + Build QA", minutes: 40 }
+      TM: { label: "Ticket Monitoring", minutes: 10 }
+      DR: { label: "Deliverability Report", minutes: 10 }
   copywriter:
     task_codes:
-      HE: { label: "HE", minutes: 60 }
-      PE: { label: "PE", minutes: 40 }
-      SM: { label: "SM", minutes: 20 }
+      HE: { label: "HTML Copywriting", minutes: 60 }
+      PE: { label: "Plain-Text Copywriting", minutes: 40 }
+      SM: { label: "SMS Copywriting", minutes: 20 }
   designer:
     task_codes:
-      HE: { label: "HE", minutes: 60 }
-      HF: { label: "HF", minutes: 30 }
-      SF: { label: "SF", minutes: 60 }
+      HE: { label: "Email Design", minutes: 60 }
+      HF: { label: "Footer Design", minutes: 30 }
+      SF: { label: "Signup Form Design", minutes: 60 }
   technician:
     task_codes:
-      HE: { label: "HE", minutes: 20 }
-      PE: { label: "PE", minutes: 20 }
-      SM: { label: "SM", minutes: 20 }
-      HF: { label: "HF", minutes: 20 }
+      HE: { label: "HTML Build", minutes: 20 }
+      PE: { label: "Plain-Text Build", minutes: 20 }
+      SM: { label: "SMS Build", minutes: 20 }
+      HF: { label: "Footer Build", minutes: 20 }
 
 # One example pod is filled in below to show the shape. Replace it with the
 # real roster, or add more pods alongside it, whenever ready.

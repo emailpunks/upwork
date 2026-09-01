@@ -102,7 +102,7 @@ def render_pod_page(pod, reconciliation):
         f"""<tr>
   <td>{escape(c.contractor)}</td>
   <td>{escape(c.date_from)} &rarr; {escape(c.date_to)}</td>
-  <td>{escape(c.code)}</td>
+  <td>{escape(c.code)}<br><span class="muted">{escape(c.label) if c.label else '(unrecognized)'}</span></td>
   <td>{c.upwork_count}</td>
   <td>{c.notion_count}</td>
   <td>{_status_span(c.status)}</td>

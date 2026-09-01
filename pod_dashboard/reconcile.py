@@ -32,6 +32,7 @@ class CodeCountCheck:
     date_from: str
     date_to: str
     code: str
+    label: str  # task_codes' descriptive label for this code, per the contractor's role; "" if unrecognized
     upwork_count: int
     notion_count: int
     status: str  # match | mismatch
@@ -77,7 +78,7 @@ def _check_hours(contractor, role, submission):
     )
 
 
-def _check_code_counts(contractor, date_from, date_to, upwork_codes, notion_records):
+def _check_code_counts(contractor, role, date_from, date_to, upwork_codes, notion_records):
     upwork_counts = Counter(upwork_codes)
     notion_counts = Counter(
         r.task_code
@@ -94,12 +95,14 @@ def _check_code_counts(contractor, date_from, date_to, upwork_codes, notion_reco
             status, detail = "mismatch", f"{uw}x submitted on Upwork, only {no}x in Notion"
         else:
             status, detail = "mismatch", f"{no}x completed in Notion, only {uw}x submitted on Upwork"
+        task_code = role.task_codes.get(code)
         checks.append(
             CodeCountCheck(
                 contractor=contractor.name,
                 date_from=date_from,
                 date_to=date_to,
                 code=code,
+                label=task_code.label if task_code else "",
                 upwork_count=uw,
                 notion_count=no,
                 status=status,
@@ -129,8 +132,9 @@ def reconcile_pod(pod, submissions, notion_records):
         by_contractor_period[(contractor, submission.date_from, submission.date_to)].append(submission)
 
     for (contractor, date_from, date_to), period_submissions in by_contractor_period.items():
+        role = pod.roles[contractor.role]
         codes = [code for s in period_submissions for code in s.codes]
-        result.code_checks.extend(_check_code_counts(contractor, date_from, date_to, codes, notion_records))
+        result.code_checks.extend(_check_code_counts(contractor, role, date_from, date_to, codes, notion_records))
 
     return result
 
