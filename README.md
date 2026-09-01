@@ -2,35 +2,44 @@
 
 Checks contractor time submitted on Upwork against the matching task records
 in Notion, split by pod. Each contractor has a role, and each role has a set
-of two-letter task codes with an expected duration (e.g. `ES` = 60 min). A
-mismatch — wrong code, wrong duration, or missing on one side — shows up on
-that pod's page.
+of two-letter task codes with a fixed expected duration (e.g. `ES` = 60
+min). Two independent checks run per pod:
 
-Static-site pipeline: `main.py` pulls from Upwork + Notion, reconciles, and
-writes `output/<pod-slug>/index.html`, deployed to Netlify via GitHub
-Actions (same shape as the `weekly-reports`/`monthly-reports` dashboards).
+1. **Submitted time vs. code stamps** — does the total time a contractor
+   submitted on Upwork match what their logged codes add up to (using each
+   code's fixed duration)?
+2. **Upwork codes vs. Notion records** — does the number of times each code
+   was submitted on Upwork match how many times Notion shows that code's
+   task actually completed?
+
+Static-site pipeline: `main.py` parses an exported Upwork timesheet CSV,
+pulls from Notion, reconciles, and writes `output/<pod-slug>/index.html`,
+deployed to Netlify via GitHub Actions (same shape as the
+`weekly-reports`/`monthly-reports` dashboards).
+
+## Why CSV, not the Upwork API
+
+Upwork's timesheet data lives behind their GraphQL API, but every new API
+app is manually reviewed by Upwork before it works — no guaranteed
+turnaround, reportedly around a week. Rather than block on that, this
+pulls from a CSV exported straight from Upwork's client timesheet report
+(`nx/reports/client/timesheet/` → Export). If Upwork ever approves faster
+API access, swapping the CSV parser (`pod_dashboard/upwork_csv.py`) for a
+live API client wouldn't touch anything downstream (reconciliation,
+rendering) — see the git history for the GraphQL version this replaced.
+
+## The CSV memo format
+
+Each CSV row is one contractor's submission for a week: `Date from`,
+`Date to`, `Talent` (`"Name (upwork_handle)"`), `Hours`, and `Memo` — a
+list of task stamps like `CT11626081516482608231519`, separated by
+newlines or spaces. **Only the first two letters of each stamp matter** —
+everything after that (task ID, timestamps) is internal to how Notion
+generates the stamp and isn't parsed. See `pod_dashboard/upwork_csv.py`.
 
 ## Setup
 
-### 1. Upwork API access
-
-1. Confirm the Email Punks Upwork client account has API access (Settings →
-   API in Upwork, or check at [upwork.com/developer/keys/apply](https://www.upwork.com/developer/keys/apply)).
-2. Register an app there to get a `client_id`/`client_secret`. Approval may
-   take a bit — everything else in this repo works against `fixtures/` in
-   the meantime (see below).
-3. Once approved, run the one-time authorization script to turn your Upwork
-   login into a refresh token:
-   ```bash
-   python3 scripts/upwork_authorize.py <client_id> <client_secret> <redirect_uri>
-   ```
-   Follow the prompts (see the script's docstring for what `redirect_uri`
-   needs to be). It prints a refresh token at the end.
-4. Find Email Punks' Upwork **organization ID** — this scopes every report
-   query. (If it's not obvious from the API app's settings, the Upwork
-   support team can confirm it.)
-
-### 2. Notion
+### 1. Notion
 
 1. Create an internal integration at [notion.so/my-integrations](https://www.notion.so/my-integrations)
    — this gives you a secret token, no code required.
@@ -38,47 +47,47 @@ Actions (same shape as the `weekly-reports`/`monthly-reports` dashboards).
    "..." → **Connections**, and add this integration. Without this step the
    API can't see the database at all, even with a valid token.
 
-### 3. Fill in secrets
+### 2. Fill in secrets
 
 Copy `pods.secrets.yaml.example` to `pods.secrets.yaml` (gitignored) and
-fill in the five values from steps 1–2. For CI, set the same five as GitHub
-Actions secrets: `UPWORK_CLIENT_ID`, `UPWORK_CLIENT_SECRET`,
-`UPWORK_REFRESH_TOKEN`, `UPWORK_ORGANIZATION_ID`, `NOTION_TOKEN`.
+fill in the Notion token. For CI, set the same value as a `NOTION_TOKEN`
+GitHub Actions secret.
 
-### 4. Fill in `pods.yaml`
+### 3. Fill in `pods.yaml`
 
 One example pod is filled in to show the shape — replace it with the real
 roster (pods, brands, contractors, roles, task codes) whenever ready. See
-the comments at the top of the file for what each field means.
+the comments at the top of the file for what each field means. Note
+`contractors[].upwork_handle` — that's the short handle Upwork shows in
+parentheses after a contractor's name (e.g. `Jane Doe (abc12de)`), not
+their display name.
 
-### 5. Netlify
+### 4. Netlify
 
 Create a Netlify site for this repo (same as Weekly/Monthly) and add
 `NETLIFY_AUTH_TOKEN`/`NETLIFY_SITE_ID` as GitHub Actions secrets.
 
 ## Running
 
+Export the timesheet CSV from Upwork (`nx/reports/client/timesheet/` →
+Export), then:
+
 ```bash
 pip install -r requirements.txt
-python3 main.py            # all pods, live Upwork + Notion data
-python3 main.py pod-a      # just one pod, by slug
+python3 main.py path/to/export.csv          # all pods
+python3 main.py path/to/export.csv pod-a    # just one pod, by slug
 ```
 
-To check the reconciliation + rendering logic without live credentials:
+To check the reconciliation + rendering logic without a real CSV or Notion
+credentials:
 
 ```bash
 python3 scripts/demo.py    # writes output/ from fixtures/
 ```
 
-## How the Upwork side works
+### Running from GitHub, without a terminal
 
-Upwork's client-facing "timesheet" report page
-(`nx/reports/client/timesheet/`) is a UI over their GraphQL API
-(`api.upwork.com/graphql`), not a REST/CSV endpoint. This pipeline calls the
-same `timeReport` query directly — see `pod_dashboard/upwork_client.py`.
-
-**Open question:** it's not yet confirmed whether contractors reliably put
-the two-letter task code in Upwork's `task` field, the `memo` field, or
-somewhere else — `pod_dashboard/reconcile.py`'s `extract_task_code()` checks
-both. Once real submissions have been seen, tighten or adjust that function
-to match how contractors actually log codes in practice.
+The `Pod reconciliation report` workflow (Actions tab → "Run workflow")
+takes the full CSV contents pasted into a text box, so a routine run
+doesn't need a local checkout — export the CSV, open it in a text editor,
+paste the contents in, run.

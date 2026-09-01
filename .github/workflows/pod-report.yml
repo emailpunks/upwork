@@ -1,7 +1,12 @@
 name: Pod reconciliation report
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      csv_content:
+        description: "Paste the full contents of the exported Upwork timesheet CSV"
+        required: true
+        type: string
 
 concurrency:
   group: pod-report
@@ -19,13 +24,14 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Generate report
-        run: python3 main.py
+      - name: Write CSV input to a file
+        run: printf '%s' "$CSV_CONTENT" > timesheet.csv
         env:
-          UPWORK_CLIENT_ID: ${{ secrets.UPWORK_CLIENT_ID }}
-          UPWORK_CLIENT_SECRET: ${{ secrets.UPWORK_CLIENT_SECRET }}
-          UPWORK_REFRESH_TOKEN: ${{ secrets.UPWORK_REFRESH_TOKEN }}
-          UPWORK_ORGANIZATION_ID: ${{ secrets.UPWORK_ORGANIZATION_ID }}
+          CSV_CONTENT: ${{ inputs.csv_content }}
+
+      - name: Generate report
+        run: python3 main.py timesheet.csv
+        env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           PYTHONUNBUFFERED: "1"
 

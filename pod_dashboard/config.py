@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -9,10 +9,6 @@ PODS_YAML = ROOT / "pods.yaml"
 SECRETS_YAML = ROOT / "pods.secrets.yaml"
 
 SECRET_ENV_VARS = {
-    "upwork_client_id": "UPWORK_CLIENT_ID",
-    "upwork_client_secret": "UPWORK_CLIENT_SECRET",
-    "upwork_refresh_token": "UPWORK_REFRESH_TOKEN",
-    "upwork_organization_id": "UPWORK_ORGANIZATION_ID",
     "notion_token": "NOTION_TOKEN",
 }
 
@@ -34,10 +30,10 @@ class Role:
     task_codes: dict  # code -> TaskCode
 
 
-@dataclass
+@dataclass(frozen=True)
 class Contractor:
     name: str
-    upwork_name: str
+    upwork_handle: str
     role: str
 
 
@@ -46,7 +42,6 @@ class Brand:
     name: str
     notion_database_id: str
     notion_property_map: dict
-    upwork_contract_ids: list = field(default_factory=list)
 
 
 @dataclass
@@ -60,10 +55,6 @@ class Pod:
 
 @dataclass
 class Secrets:
-    upwork_client_id: str
-    upwork_client_secret: str
-    upwork_refresh_token: str
-    upwork_organization_id: str
     notion_token: str
 
 
@@ -83,7 +74,7 @@ def load_secrets():
             raise PodConfigError(f"pods.secrets.yaml is missing a required field: {e}")
 
     raise PodConfigError(
-        "No secrets found — set the UPWORK_*/NOTION_TOKEN env vars, or copy "
+        "No secrets found — set the NOTION_TOKEN env var, or copy "
         "pods.secrets.yaml.example to pods.secrets.yaml and fill it in."
     )
 
@@ -102,7 +93,6 @@ def _build_brand(entry):
             name=entry["name"],
             notion_database_id=entry["notion_database_id"],
             notion_property_map=entry["notion_property_map"],
-            upwork_contract_ids=entry.get("upwork_contract_ids", []),
         )
     except KeyError as e:
         raise PodConfigError(f"brand entry {entry!r} is missing required field {e}")
@@ -121,7 +111,7 @@ def load_pods(path=PODS_YAML):
 
         roles = {name: _build_role(name, data) for name, data in (entry.get("roles") or {}).items()}
         contractors = [
-            Contractor(name=c["name"], upwork_name=c["upwork_name"], role=c["role"])
+            Contractor(name=c["name"], upwork_handle=c["upwork_handle"], role=c["role"])
             for c in entry.get("contractors", [])
         ]
         brands = [_build_brand(b) for b in entry.get("brands", [])]

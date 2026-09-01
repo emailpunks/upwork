@@ -11,7 +11,6 @@ class NotionTaskRecord:
     contractor: str
     task_code: str
     date: str
-    duration_minutes: float
 
 
 class NotionError(RuntimeError):
@@ -46,18 +45,19 @@ class NotionClient:
         return pages
 
     def query_task_records(self, database_id, property_map):
-        """property_map maps our field names (contractor, task_code, date,
-        duration_minutes) to this database's actual Notion property names,
-        since schemas vary per brand — see pods.yaml."""
+        """property_map maps our field names (contractor, task_code, date) to
+        this database's actual Notion property names, since schemas vary per
+        brand — see pods.yaml. Expected duration for a task code comes from
+        pods.yaml's task_codes, not from Notion — this is just the log of
+        which coded tasks were completed, by whom, and when."""
         records = []
         for page in self._query_database_pages(database_id):
             props = page["properties"]
             records.append(
                 NotionTaskRecord(
                     contractor=_extract_text(props.get(property_map["contractor"])),
-                    task_code=_extract_text(props.get(property_map["task_code"])),
+                    task_code=_extract_text(props.get(property_map["task_code"])).strip().upper(),
                     date=_extract_date(props.get(property_map["date"])),
-                    duration_minutes=_extract_number(props.get(property_map["duration_minutes"])),
                 )
             )
         return records
@@ -84,9 +84,3 @@ def _extract_date(prop):
         return ""
     date = prop.get("date")
     return date["start"] if date else ""
-
-
-def _extract_number(prop):
-    if not prop or prop.get("type") != "number":
-        return 0.0
-    return prop.get("number") or 0.0

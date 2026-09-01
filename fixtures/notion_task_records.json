@@ -1,32 +1,8 @@
 [
-  {
-    "contractor": "Example Contractor",
-    "task_code": "ES",
-    "date": "2026-08-25",
-    "duration_minutes": 60
-  },
-  {
-    "contractor": "Example Contractor",
-    "task_code": "QA",
-    "date": "2026-08-26",
-    "duration_minutes": 40
-  },
-  {
-    "contractor": "Example Contractor",
-    "task_code": "ES",
-    "date": "2026-08-27",
-    "duration_minutes": 60
-  },
-  {
-    "contractor": "Example Contractor",
-    "task_code": "ES",
-    "date": "2026-08-29",
-    "duration_minutes": 60
-  },
-  {
-    "contractor": "Example Contractor",
-    "task_code": "QA",
-    "date": "2026-08-30",
-    "duration_minutes": 40
-  }
+  { "contractor": "Example Contractor", "task_code": "ES", "date": "2026-08-25" },
+  { "contractor": "Example Contractor", "task_code": "QA", "date": "2026-08-26" },
+  { "contractor": "Example Contractor", "task_code": "ES", "date": "2026-09-01" },
+  { "contractor": "Example Contractor", "task_code": "ES", "date": "2026-09-02" },
+  { "contractor": "Example Contractor", "task_code": "QA", "date": "2026-09-01" },
+  { "contractor": "Example Contractor", "task_code": "QA", "date": "2026-09-03" }
 ]

@@ -1,144 +1,147 @@
-import re
-from collections import defaultdict
-from dataclasses import dataclass
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 
-# How close a submitted duration has to be to the task code's expected
-# duration to still count as a match, rather than a duration mismatch.
-# Upwork logs time in fractional hours, so a little rounding slack avoids
-# flagging e.g. 59 vs 60 minutes as a mismatch.
-DURATION_TOLERANCE_MINUTES = 5
+# How close a submission's total minutes has to be to what its code stamps
+# add up to, to still count as a match rather than an hours mismatch. Upwork
+# logs time in fractional hours, so a little rounding slack avoids flagging
+# e.g. 59 vs 60 minutes.
+HOURS_TOLERANCE_MINUTES = 1
 
 
 @dataclass
-class ReconciliationEntry:
+class HoursCheck:
+    """One Upwork CSV row (a contractor's submission for a period): does the
+    total time they submitted match what their logged code stamps add up
+    to, using each code's fixed expected duration from pods.yaml?"""
+
     contractor: str
-    date: str
-    status: str  # match | code_mismatch | duration_mismatch | missing_in_notion | missing_in_upwork
-    submitted_code: str
+    date_from: str
+    date_to: str
     submitted_minutes: float
-    expected_code: str
     expected_minutes: float
+    status: str  # match | mismatch
     detail: str
 
 
-def extract_task_code(text, valid_codes):
-    """Looks for one of this role's known two-letter codes as a whole word in
-    the given text (checked against both the Upwork `task` field and `memo`,
-    since it's not yet confirmed which one contractors reliably use — see
-    README.md). Returns None if no known code is found."""
-    if not text:
-        return None
-    words = re.findall(r"[A-Za-z]{2,}", text.upper())
-    for code in valid_codes:
-        if code.upper() in words:
-            return code
-    return None
+@dataclass
+class CodeCountCheck:
+    """One (contractor, period, code) combination: did they log this code on
+    Upwork the same number of times Notion shows it was actually completed?"""
+
+    contractor: str
+    date_from: str
+    date_to: str
+    code: str
+    upwork_count: int
+    notion_count: int
+    status: str  # match | mismatch
+    detail: str
 
 
-def _group_by_date(items, date_fn):
-    grouped = defaultdict(list)
-    for item in items:
-        grouped[date_fn(item)].append(item)
-    return grouped
+@dataclass
+class PodReconciliation:
+    hours_checks: list = field(default_factory=list)
+    code_checks: list = field(default_factory=list)
 
 
-def _reconcile_day(contractor_name, date, upwork_day, notion_day, valid_codes):
-    unmatched_notion = list(notion_day)
-    results = []
+def _date_in_range(date, date_from, date_to):
+    return date_from <= date <= date_to
 
-    for uw in upwork_day:
-        code = extract_task_code(uw.task, valid_codes) or extract_task_code(uw.memo, valid_codes)
-        submitted_minutes = uw.hours_worked * 60
 
-        match = next((n for n in unmatched_notion if n.task_code == code), None) if code else None
-        if match:
-            unmatched_notion.remove(match)
-            if abs(submitted_minutes - match.duration_minutes) <= DURATION_TOLERANCE_MINUTES:
-                status, detail = "match", ""
-            else:
-                status = "duration_mismatch"
-                detail = f"submitted {submitted_minutes:.0f}m, Notion expects {match.duration_minutes:.0f}m"
-            results.append(
-                ReconciliationEntry(
-                    contractor=contractor_name,
-                    date=date,
-                    status=status,
-                    submitted_code=code or "",
-                    submitted_minutes=submitted_minutes,
-                    expected_code=match.task_code,
-                    expected_minutes=match.duration_minutes,
-                    detail=detail,
-                )
-            )
-        elif unmatched_notion:
-            other = unmatched_notion.pop(0)
-            results.append(
-                ReconciliationEntry(
-                    contractor=contractor_name,
-                    date=date,
-                    status="code_mismatch",
-                    submitted_code=code or "(none found)",
-                    submitted_minutes=submitted_minutes,
-                    expected_code=other.task_code,
-                    expected_minutes=other.duration_minutes,
-                    detail=f"submitted code {code or '(none found)'!r}, Notion record is {other.task_code!r}",
-                )
-            )
+def _check_hours(contractor, role, submission):
+    counts = Counter(submission.codes)
+    unrecognized_codes = sorted(c for c in counts if c not in role.task_codes)
+    expected_minutes = sum(counts[c] * role.task_codes[c].minutes for c in counts if c in role.task_codes)
+    submitted_minutes = submission.hours * 60
+
+    problems = []
+    if unrecognized_codes:
+        problems.append(f"unrecognized code(s) {', '.join(unrecognized_codes)}")
+    if submission.unrecognized_text:
+        problems.append(f"non-code text in memo: {'; '.join(submission.unrecognized_text)}")
+    if abs(expected_minutes - submitted_minutes) > HOURS_TOLERANCE_MINUTES:
+        problems.append(f"submitted {submitted_minutes:.0f}m, codes add up to {expected_minutes:.0f}m")
+
+    code_summary = ", ".join(f"{code}x{n}" for code, n in sorted(counts.items()))
+    status = "mismatch" if problems else "match"
+    detail = "; ".join(problems) if problems else code_summary
+
+    return HoursCheck(
+        contractor=contractor.name,
+        date_from=submission.date_from,
+        date_to=submission.date_to,
+        submitted_minutes=submitted_minutes,
+        expected_minutes=expected_minutes,
+        status=status,
+        detail=detail,
+    )
+
+
+def _check_code_counts(contractor, date_from, date_to, upwork_codes, notion_records):
+    upwork_counts = Counter(upwork_codes)
+    notion_counts = Counter(
+        r.task_code
+        for r in notion_records
+        if r.contractor == contractor.name and _date_in_range(r.date, date_from, date_to)
+    )
+
+    checks = []
+    for code in sorted(set(upwork_counts) | set(notion_counts)):
+        uw, no = upwork_counts.get(code, 0), notion_counts.get(code, 0)
+        if uw == no:
+            status, detail = "match", f"{uw}x on both sides"
+        elif uw > no:
+            status, detail = "mismatch", f"{uw}x submitted on Upwork, only {no}x in Notion"
         else:
-            results.append(
-                ReconciliationEntry(
-                    contractor=contractor_name,
-                    date=date,
-                    status="missing_in_notion",
-                    submitted_code=code or "(none found)",
-                    submitted_minutes=submitted_minutes,
-                    expected_code="",
-                    expected_minutes=0,
-                    detail="no matching Notion task record found for this date",
-                )
-            )
-
-    for leftover in unmatched_notion:
-        results.append(
-            ReconciliationEntry(
-                contractor=contractor_name,
-                date=date,
-                status="missing_in_upwork",
-                submitted_code="",
-                submitted_minutes=0,
-                expected_code=leftover.task_code,
-                expected_minutes=leftover.duration_minutes,
-                detail="Notion task record has no matching Upwork submission",
+            status, detail = "mismatch", f"{no}x completed in Notion, only {uw}x submitted on Upwork"
+        checks.append(
+            CodeCountCheck(
+                contractor=contractor.name,
+                date_from=date_from,
+                date_to=date_to,
+                code=code,
+                upwork_count=uw,
+                notion_count=no,
+                status=status,
+                detail=detail,
             )
         )
+    return checks
 
-    return results
 
+def reconcile_pod(pod, submissions, notion_records):
+    """submissions may include rows for contractors outside this pod (the
+    same CSV covers everyone) — those are silently skipped here, not
+    reported as unknown. Call unknown_handles() separately across all pods
+    to catch handles that aren't anyone's."""
+    by_handle = {c.upwork_handle: c for c in pod.contractors}
 
-def reconcile_pod(pod, upwork_entries, notion_records):
-    """Returns a flat list of ReconciliationEntry across every contractor in
-    the pod, for the date range the entries/records were fetched for."""
-    all_results = []
+    result = PodReconciliation()
+    by_contractor_period = defaultdict(list)  # (contractor, date_from, date_to) -> [submission, ...]
 
-    for contractor in pod.contractors:
+    for submission in submissions:
+        contractor = by_handle.get(submission.contractor_handle)
+        if not contractor:
+            continue
+
         role = pod.roles[contractor.role]
-        valid_codes = set(role.task_codes.keys())
+        result.hours_checks.append(_check_hours(contractor, role, submission))
+        by_contractor_period[(contractor, submission.date_from, submission.date_to)].append(submission)
 
-        c_upwork = [e for e in upwork_entries if e.contractor_name == contractor.upwork_name]
-        c_notion = [r for r in notion_records if r.contractor == contractor.name]
+    for (contractor, date_from, date_to), period_submissions in by_contractor_period.items():
+        codes = [code for s in period_submissions for code in s.codes]
+        result.code_checks.extend(_check_code_counts(contractor, date_from, date_to, codes, notion_records))
 
-        upwork_by_date = _group_by_date(c_upwork, lambda e: e.date)
-        notion_by_date = _group_by_date(c_notion, lambda r: r.date)
+    return result
 
-        for date in sorted(set(upwork_by_date) | set(notion_by_date)):
-            all_results.extend(
-                _reconcile_day(
-                    contractor.name,
-                    date,
-                    upwork_by_date.get(date, []),
-                    notion_by_date.get(date, []),
-                    valid_codes,
-                )
-            )
 
-    return all_results
+def unknown_handles(all_pods, submissions):
+    """Upwork handles present in the CSV that don't belong to any contractor
+    in any pod — likely a typo in pods.yaml or someone new who hasn't been
+    added yet."""
+    known = {c.upwork_handle for pod in all_pods for c in pod.contractors}
+    seen = []
+    for submission in submissions:
+        if submission.contractor_handle not in known and submission.contractor_handle not in seen:
+            seen.append(submission.contractor_handle)
+    return seen

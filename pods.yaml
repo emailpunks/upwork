@@ -1,24 +1,26 @@
 # Registry of pods this pipeline reconciles Upwork time submissions against
-# Notion task records for. Non-secret config only — Upwork/Notion tokens live
-# in pods.secrets.yaml (gitignored) for local runs, or GitHub Actions secrets
-# in CI (see README.md).
+# Notion task records for. Non-secret config only — the Notion token lives in
+# pods.secrets.yaml (gitignored) for local runs, or a GitHub Actions secret in
+# CI (see README.md).
 #
 # One example pod is filled in below to show the shape. Replace it with the
 # real roster, or add more pods alongside it, whenever ready.
 #
 # - roles.<role>.task_codes maps the two-letter code a contractor logs
-#   against a task to its expected duration in minutes. A contractor's
-#   Upwork submission is checked against whichever code/duration their
-#   matching Notion task record carries — these are the known-good values a
-#   mismatch is measured against.
-# - contractors[].upwork_name must match `freelancer.name` exactly as
-#   returned by Upwork's timeReport API, since that's the only key available
-#   to tie a submission back to a contractor.
-# - brands[].notion_database_id is the Notion database this brand's tasks
-#   live in. notion_property_map lets each brand's database use its own
-#   property names (schemas aren't assumed to be uniform across brands).
-# - brands[].upwork_contract_ids scopes which Upwork contracts count toward
-#   this brand, since one pod can span several client-side contracts.
+#   against a task to its fixed expected duration in minutes. This is the
+#   only place duration comes from — Upwork submissions and Notion records
+#   are both just checked against it, neither is itself a source of truth
+#   for how long a code "should" take.
+# - contractors[].upwork_handle must match the handle Upwork shows in
+#   parentheses after a contractor's name in the timesheet CSV's "Talent"
+#   column (e.g. "Jane Doe (abc12de)" -> upwork_handle: "abc12de") — it's
+#   stable, unlike the display name.
+# - contractors[].name is how this contractor is identified in Notion
+#   (whatever the "contractor" property in notion_property_map resolves to).
+# - brands[].notion_database_id is the Notion database this brand's
+#   completed-task log lives in. notion_property_map lets each brand's
+#   database use its own property names (schemas aren't assumed to be
+#   uniform across brands).
 
 pods:
   - slug: pod-a
@@ -30,11 +32,9 @@ pods:
           contractor: "Assigned To"
           task_code: "Task Code"
           date: "Date"
-          duration_minutes: "Duration (min)"
-        upwork_contract_ids: []
     contractors:
       - name: "Example Contractor"
-        upwork_name: "Example Contractor"
+        upwork_handle: "abc12de"
         role: designer
     roles:
       designer:
