@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from pod_dashboard.config import load_pods
+from pod_dashboard.admin_page import ADMIN_PATH, render_admin_page
+from pod_dashboard.config import load_pods, load_roles
 from pod_dashboard.notion_client import NotionTaskRecord
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles
 from pod_dashboard.render import render_index, render_pod_page
@@ -20,7 +21,11 @@ OUTPUT_DIR = ROOT / "output"
 
 
 def main():
-    pods = load_pods()
+    pods = load_pods(pod_data_dir=FIXTURES / "pod_data")
+
+    admin_dir = OUTPUT_DIR / ADMIN_PATH
+    admin_dir.mkdir(parents=True, exist_ok=True)
+    (admin_dir / "index.html").write_text(render_admin_page(pods, load_roles()))
 
     submissions = parse_timesheet_csv(FIXTURES / "sample_timesheet.csv")
     notion_records = [

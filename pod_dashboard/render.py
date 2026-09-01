@@ -1,5 +1,7 @@
 from html import escape
 
+from .admin_page import ADMIN_PATH
+
 CSS = """
 :root {
   color-scheme: dark;
@@ -37,6 +39,9 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 11.5px; text-tra
 .pod-list a { display: block; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .pod-list a:last-child { border-bottom: none; }
 .warning { background: rgba(249,188,60,0.12); border: 1px solid rgba(249,188,60,0.3); border-radius: 8px; padding: 10px 14px; font-size: 12.5px; color: var(--warn); margin-top: 16px; }
+.admin-link { text-align: right; margin: 40px 0 0; }
+.admin-link a { color: var(--text-muted); font-size: 11px; text-decoration: none; }
+.admin-link a:hover { color: var(--text-secondary); }
 """
 
 
@@ -78,6 +83,7 @@ def render_index(pods, unknown_handles=None):
 {rows}
 </div>
 {unknown_warning}
+<p class="admin-link"><a href="{ADMIN_PATH}/">Admin</a></p>
 """
     return _page("Pod Reconciliation", body)
 
@@ -133,5 +139,7 @@ def render_pod_page(pod, reconciliation):
 {code_rows}
 </tbody>
 </table>
+
+<p class="admin-link"><a href="../{ADMIN_PATH}/">Admin</a></p>
 """
     return _page(pod.name, body)

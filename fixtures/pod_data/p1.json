@@ -1,0 +1,6 @@
+{
+  "name": "P1",
+  "contractors": [
+    { "name": "Example Contractor", "upwork_handle": "abc12de", "role": "designer" }
+  ]
+}

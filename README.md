@@ -55,9 +55,10 @@ GitHub Actions secret.
 
 ### 3. Fill in `pods.yaml`
 
-One example pod is filled in to show the shape — replace it with the real
-roster (pods, brands, contractors, roles, task codes) whenever ready. See
-the comments at the top of the file for what each field means. Note
+Roles and task codes are already filled in (shared across every pod — see
+the top of the file). Pods are named P1, P2, etc.; brands (which Notion
+database each pod's tasks live in) need to be added by hand once known.
+**Contractors don't** — see Admin page below. Note
 `contractors[].upwork_handle` — that's the short handle Upwork shows in
 parentheses after a contractor's name (e.g. `Jane Doe (abc12de)`), not
 their display name.
@@ -74,8 +75,8 @@ Export), then:
 
 ```bash
 pip install -r requirements.txt
-python3 main.py path/to/export.csv          # all pods
-python3 main.py path/to/export.csv pod-a    # just one pod, by slug
+python3 main.py path/to/export.csv       # all pods
+python3 main.py path/to/export.csv p1    # just one pod, by slug
 ```
 
 To check the reconciliation + rendering logic without a real CSV or Notion
@@ -90,4 +91,27 @@ python3 scripts/demo.py    # writes output/ from fixtures/
 The `Pod reconciliation report` workflow (Actions tab → "Run workflow")
 takes the full CSV contents pasted into a text box, so a routine run
 doesn't need a local checkout — export the CSV, open it in a text editor,
-paste the contents in, run.
+paste the contents in, run. The Admin page below does this same thing
+without needing the Actions tab at all.
+
+## Admin page
+
+Every pod page's footer has a small "Admin" link. That page lets you:
+
+- **Paste a timesheet CSV and see unassigned handles.** Any Upwork handle
+  in the CSV that isn't yet assigned to a contractor in any pod shows up
+  with a Pod + Role picker — pick both and save, no YAML editing. New pods
+  can be created inline (type a name like "P2", click "Add to pod list") —
+  a pod created this way has no brands until those are added to `pods.yaml`
+  by hand.
+- **Run the report** with that same pasted CSV, redeploying every pod's
+  page — the same trigger as the GitHub Actions "Run workflow" button, just
+  without leaving the page.
+
+Assignments are written to `pod_data/{slug}.json` (one file per pod,
+merged with `pods.yaml` at build time — see `pod_dashboard/config.py`).
+It's gated by a password (same one as Weekly/Monthly's Admin pages — not
+real security, just a speed bump) and a GitHub personal access token you
+generate yourself and keep only in your browser's local storage, scoped to
+this repo's Contents + Actions APIs. See the page itself for how to
+generate one.

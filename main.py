@@ -3,7 +3,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from pod_dashboard.config import PodConfigError, load_pods, load_secrets
+from pod_dashboard.admin_page import ADMIN_PATH, render_admin_page
+from pod_dashboard.config import PodConfigError, load_pods, load_roles, load_secrets
 from pod_dashboard.notion_client import NotionClient
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles as find_unknown_handles
 from pod_dashboard.render import render_index, render_pod_page
@@ -48,6 +49,11 @@ def main():
 
     OUTPUT_DIR.mkdir(exist_ok=True)
     (OUTPUT_DIR / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
+
+    admin_dir = OUTPUT_DIR / ADMIN_PATH
+    admin_dir.mkdir(parents=True, exist_ok=True)
+    (admin_dir / "index.html").write_text(render_admin_page(all_pods, load_roles()))
+
     unknown = find_unknown_handles(all_pods, submissions)
     if unknown:
         print(f"Warning: unrecognized Upwork handle(s) in CSV: {', '.join(unknown)}", file=sys.stderr)

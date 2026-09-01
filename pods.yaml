@@ -20,6 +20,13 @@
 #   completed-task log lives in. notion_property_map lets each brand's
 #   database use its own property names (schemas aren't assumed to be
 #   uniform across brands).
+#
+# Contractors don't have to be added here by hand — the Admin page lets you
+# assign an unrecognized Upwork handle (seen in an uploaded CSV) to a pod
+# and role directly, no YAML editing required. Those assignments live in
+# pod_data/{slug}.json (see pod_dashboard/config.py) and are merged in on
+# top of whatever's defined here, including for pods that don't have a
+# pods.yaml entry at all yet.
 roles:
   coordinator:
     task_codes:
@@ -45,19 +52,11 @@ roles:
       SM: { label: "SMS Build", minutes: 20 }
       HF: { label: "Footer Build", minutes: 20 }
 
-# One example pod is filled in below to show the shape. Replace it with the
-# real roster, or add more pods alongside it, whenever ready.
+# Pods are named P1, P2, etc. Brands (which Notion database each pod's
+# tasks live in) still need to be added here by hand, once known — the
+# Admin page only manages contractor-to-pod-and-role assignment.
 pods:
-  - slug: pod-a
-    name: "Pod A"
-    brands:
-      - name: "Example Brand"
-        notion_database_id: "REPLACE_WITH_NOTION_DATABASE_ID"
-        notion_property_map:
-          contractor: "Assigned To"
-          task_code: "Task Code"
-          date: "Date"
-    contractors:
-      - name: "Example Contractor"
-        upwork_handle: "abc12de"
-        role: designer
+  - slug: p1
+    name: "P1"
+    brands: []
+    contractors: []
