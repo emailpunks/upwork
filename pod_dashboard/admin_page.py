@@ -86,8 +86,15 @@ def render_admin_page(pods, roles):
 
   <section class="card">
     <h2>Timesheet CSV</h2>
-    <p class="muted">Paste the full contents of the CSV exported from Upwork's client timesheet report.</p>
-    <textarea id="csv-input" rows="8" placeholder='"Date from","Date to","Talent","Hours","Memo"&#10;...'></textarea>
+    <p class="muted">Drop the CSV exported from Upwork's client timesheet report, or click to choose the file.</p>
+    <div id="drop-zone" class="drop-zone">
+      <span id="drop-zone-text">Drop CSV here, or click to choose a file</span>
+      <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none" />
+    </div>
+    <details style="margin-top:10px;">
+      <summary>Paste text instead</summary>
+      <textarea id="csv-input" rows="8" placeholder='"Date from","Date to","Talent","Hours","Memo"&#10;...' style="margin-top:8px;"></textarea>
+    </details>
     <div class="row" style="margin-top:10px;">
       <button id="parse-btn" class="btn btn-primary">Parse CSV</button>
     </div>
@@ -205,6 +212,16 @@ table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 th { color: var(--text-secondary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
 td select { min-width: 130px; }
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.drop-zone.drag-over { border-color: var(--accent); color: var(--text-primary); background: rgba(249,188,60,0.06); }
 """
 
 
@@ -316,6 +333,48 @@ JS = """
   }}
 
   var unassigned = []; // [{{name, handle}}]
+
+  // ---- Drop zone / file picker for the CSV ----
+  var dropZone = document.getElementById('drop-zone');
+  var dropZoneText = document.getElementById('drop-zone-text');
+  var fileInput = document.getElementById('csv-file-input');
+
+  function loadCsvFile(file) {{
+    if (!file) return;
+    dropZoneText.textContent = 'Reading ' + file.name + '…';
+    var reader = new FileReader();
+    reader.onload = function() {{
+      document.getElementById('csv-input').value = reader.result;
+      dropZoneText.textContent = 'Loaded ' + file.name + ' — click Parse CSV below';
+      document.getElementById('parse-btn').click();
+    }};
+    reader.onerror = function() {{
+      dropZoneText.textContent = 'Could not read that file — try again.';
+    }};
+    reader.readAsText(file);
+  }}
+
+  dropZone.addEventListener('click', function() {{ fileInput.click(); }});
+  fileInput.addEventListener('change', function() {{ loadCsvFile(fileInput.files[0]); }});
+
+  ['dragenter', 'dragover'].forEach(function(evt) {{
+    dropZone.addEventListener(evt, function(e) {{
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    }});
+  }});
+  ['dragleave', 'drop'].forEach(function(evt) {{
+    dropZone.addEventListener(evt, function(e) {{
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    }});
+  }});
+  dropZone.addEventListener('drop', function(e) {{
+    var file = e.dataTransfer.files && e.dataTransfer.files[0];
+    loadCsvFile(file);
+  }});
 
   document.getElementById('parse-btn').addEventListener('click', function() {{
     var status = document.getElementById('parse-status');
