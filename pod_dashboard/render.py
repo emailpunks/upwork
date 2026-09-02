@@ -78,7 +78,7 @@ def render_pod_tables(reconciliation):
 </table>
 
 <h2>Upwork codes vs. Notion master list</h2>
-<p class="muted">Does each submitted code exactly match one Notion generated for this contractor, and hasn't already been claimed in a previous run?</p>
+<p class="muted">Does each submitted code exactly match one on Notion's master list, and hasn't this contractor already claimed it in a previous run?</p>
 {period_line}
 <table>
 <thead><tr><th>Contractor</th><th>Code</th><th>Status</th><th>Detail</th></tr></thead>

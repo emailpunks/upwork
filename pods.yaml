@@ -14,12 +14,15 @@
 #   parentheses after a contractor's name in the timesheet CSV's "Talent"
 #   column (e.g. "Jane Doe (abc12de)" -> upwork_handle: "abc12de") — it's
 #   stable, unlike the display name.
-# - pods[].contractors[].name is how this contractor is identified in Notion
-#   (whatever the "contractor" property in notion_property_map resolves to).
+# - pods[].contractors[].name is used for display and for the used-codes
+#   ledger (pod_dashboard/ledger.py) — Notion itself has no per-contractor
+#   assignment, a code is just a ticket any pod member can legitimately
+#   submit once each.
 # - pods[].brands[].notion_database_id is the Notion database this brand's
-#   completed-task log lives in. notion_property_map lets each brand's
-#   database use its own property names (schemas aren't assumed to be
-#   uniform across brands).
+#   completed-task log lives in — just a list of tickets/codes, no
+#   assignee. notion_property_map only needs "task_code" (the Notion
+#   property holding the full generated code), named per-brand since
+#   property names aren't assumed to be uniform across brands.
 #
 # Contractors don't have to be added here by hand — the Admin page lets you
 # assign an unrecognized Upwork handle (seen in an uploaded CSV) to a pod

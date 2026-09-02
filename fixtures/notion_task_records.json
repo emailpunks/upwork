@@ -1,5 +1,5 @@
 [
-  { "contractor": "Example Contractor", "task_code": "HE0012026082416480001", "date": "2026-08-17" },
-  { "contractor": "Example Contractor", "task_code": "HF0032026082416480003", "date": "2026-08-25" },
-  { "contractor": "Example Contractor", "task_code": "SF0042026082616480004", "date": "2026-08-26" }
+  { "task_code": "HE0012026082416480001" },
+  { "task_code": "HF0032026082416480003" },
+  { "task_code": "SF0042026082616480004" }
 ]

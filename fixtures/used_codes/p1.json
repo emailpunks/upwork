@@ -1,3 +1,5 @@
 {
-  "HE0012026082416480001": { "contractor": "Example Contractor", "period": "2026-08-17 to 2026-08-23" }
+  "HE0012026082416480001": {
+    "Example Contractor": "2026-08-17 to 2026-08-23"
+  }
 }

@@ -74,9 +74,11 @@ def _check_hours(contractor, role, submission):
 
 
 def _check_codes(contractor, role, date_from, date_to, upwork_codes, notion_codes, used_codes):
-    """notion_codes: the full set of codes Notion has for this contractor
-    (the "master database"). used_codes: the persisted ledger of codes
-    already claimed in a prior run — mutated in place with any newly
+    """notion_codes: the full set of codes Notion has for this pod (the
+    "master list") — there's no per-contractor assignment in Notion, so any
+    pod member can legitimately submit any of these codes, just not the
+    same one twice. used_codes: this pod's whole ledger, keyed by code then
+    by contractor name (see ledger.py) — mutated in place with any newly
     verified code, so the caller can save it back out."""
     checks = []
     seen_this_batch = set()
@@ -85,18 +87,18 @@ def _check_codes(contractor, role, date_from, date_to, upwork_codes, notion_code
         prefix = code[:2].upper()
         task_code = role.task_codes.get(prefix)
         label = task_code.label if task_code else ""
+        claimed_by = used_codes.get(code, {})
 
         if code in seen_this_batch:
             status, detail = "mismatch", "submitted more than once in this batch"
-        elif code in used_codes:
-            prior = used_codes[code]
+        elif contractor.name in claimed_by:
             status = "mismatch"
-            detail = f"already claimed by {prior.get('contractor', '?')} ({prior.get('period', '?')})"
+            detail = f"you already claimed this code ({claimed_by[contractor.name]})"
         elif code not in notion_codes:
-            status, detail = "mismatch", "no exact match in Notion for this contractor"
+            status, detail = "mismatch", "no exact match in the Notion master list"
         else:
             status, detail = "match", "verified against Notion"
-            used_codes[code] = {"contractor": contractor.name, "period": f"{date_from} to {date_to}"}
+            used_codes.setdefault(code, {})[contractor.name] = f"{date_from} to {date_to}"
 
         seen_this_batch.add(code)
         checks.append(
@@ -123,10 +125,7 @@ def reconcile_pod(pod, submissions, notion_records, used_codes):
     any newly verified code — the caller is responsible for persisting it
     after this returns."""
     by_handle = {c.upwork_handle: c for c in pod.contractors}
-
-    notion_codes_by_contractor = defaultdict(set)
-    for r in notion_records:
-        notion_codes_by_contractor[r.contractor].add(r.task_code)
+    notion_codes = {r.task_code for r in notion_records}
 
     result = PodReconciliation()
     by_contractor_period = defaultdict(list)  # (contractor, date_from, date_to) -> [submission, ...]
@@ -143,7 +142,6 @@ def reconcile_pod(pod, submissions, notion_records, used_codes):
     for (contractor, date_from, date_to), period_submissions in by_contractor_period.items():
         role = pod.roles[contractor.role]
         codes = [code for s in period_submissions for code in s.codes]
-        notion_codes = notion_codes_by_contractor.get(contractor.name, set())
         result.code_checks.extend(_check_codes(contractor, role, date_from, date_to, codes, notion_codes, used_codes))
 
     return result

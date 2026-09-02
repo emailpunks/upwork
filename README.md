@@ -9,14 +9,16 @@ min). Two independent checks run per pod:
    submitted on Upwork match what their logged codes add up to (using each
    code's two-letter prefix and its fixed duration)?
 2. **Upwork codes vs. Notion master list** — does each *full* code a
-   contractor submitted exactly match one Notion generated for them (the
-   "master list", pulled fresh from Notion every run), and hasn't already
-   been claimed in a previous run? Notion is read-only here — nothing is
-   ever written back to it. Instead, every code confirmed as a genuine,
-   first-time match gets recorded in `used_codes/{pod-slug}.json` (see
+   contractor submitted exactly match one on Notion's master list (pulled
+   fresh every run), and hasn't this same contractor already claimed it in
+   a previous run? Notion has no per-contractor assignment — a code is
+   just a ticket, and any pod member can legitimately submit it once each.
+   Notion is read-only here — nothing is ever written back to it. Instead,
+   every code confirmed as a genuine, first-time-for-this-contractor match
+   gets recorded in `used_codes/{pod-slug}.json` (see
    `pod_dashboard/ledger.py`), committed back to this repo by the GitHub
-   Actions workflow after each run, so the same code can never be
-   re-claimed later.
+   Actions workflow after each run, so that contractor can't re-claim it
+   later (someone else on the pod still can, once).
 
 Static-site pipeline: `main.py` parses an exported Upwork timesheet CSV,
 pulls from Notion, reconciles, and writes a landing page
