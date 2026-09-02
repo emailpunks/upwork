@@ -103,7 +103,7 @@ def _build_brand(entry):
 def _load_pod_overlay(slug, pod_data_dir):
     """Admin-page-managed contractor additions for one pod — written
     straight to pod_data/{slug}.json by the Admin page via the GitHub
-    Contents API (see admin_page.py). Absent for any pod the Admin page
+    Contents API (see page.py). Absent for any pod the Admin page
     hasn't touched. A slug with no pods.yaml entry at all becomes a
     brand-new pod defined entirely by its overlay file."""
     path = pod_data_dir / f"{slug}.json"

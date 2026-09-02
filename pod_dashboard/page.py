@@ -1,51 +1,55 @@
-"""Internal-only Admin page — lets Ashton paste an exported Upwork timesheet
-CSV, see which Upwork handles in it aren't assigned to a pod/role yet, and
-assign them right there (no YAML editing). Also triggers a report run with
-that same CSV.
+"""The whole site is one page, behind one password gate: reconciliation
+results for every pod at the top, then the admin tools (assign contractors,
+run a new report) below. There's no separate public dashboard and no
+separate hidden admin URL — everything here needs the password.
 
 Deliberately NOT real security: the password gate is a client-side SHA-256
 comparison (trivially bypassable via view-source), and the page's only real
-protection is (a) living at an unguessable path, (b) sitting behind
-Netlify's own site-wide password, and (c) a GitHub token scoped to just
-this one repo's Contents API, entered once and kept in the browser's
-localStorage only — never written to the repo or bundled into the deployed
-source. Same mechanism as the Weekly/Monthly dashboards' Admin pages, same
-password by choice.
+protection is (a) Netlify's own site-wide password, and (b) a GitHub token
+scoped to just this one repo's Contents/Actions APIs, entered once and kept
+in the browser's localStorage only — never written to the repo or bundled
+into the deployed source. Same mechanism as the Weekly/Monthly dashboards'
+Admin pages, same password by choice.
 
 Writes go straight to pod_data/{slug}.json in this repo via the GitHub
 Contents API (GET for the current sha, then PUT the updated JSON) — see
 config.py's _load_pod_overlay()/load_pods() for how the pipeline reads it
 back. Assigning someone to a pod slug that doesn't exist in pods.yaml yet
 creates that pod entirely from pod_data (no brands until those are added
-by hand — this page only manages contractor-to-pod-and-role assignment).
+by hand — this only manages contractor-to-pod-and-role assignment).
 """
 
 import json
 
-ADMIN_PATH = "admin-kf14qbxm2pvg"
+from .render import DASHBOARD_CSS, render_dashboard_section
+
 GITHUB_OWNER = "emailpunks"
 GITHUB_REPO = "upwork"
 REPORT_WORKFLOW = "pod-report.yml"
 
-# SHA-256 hex digest of the admin password. Same password as the
+# SHA-256 hex digest of the page password. Same password as the
 # Weekly/Monthly dashboards' Admin pages, by choice — see those repos'
-# admin_page.py for how to change it (same mechanism, not real security
+# page.py for how to change it (same mechanism, not real security
 # either way).
 PASSWORD_SHA256 = "08fcf9917fe0f61ff5cab6e52d8bf058119f3497d9c21c856911d403a29084d9"
 
 
-def render_admin_page(pods, roles):
-    """pods: list of Pod (slug/name used). roles: dict of role name -> Role
-    (only the names are used, to populate the role picker)."""
-    pods_json = json.dumps([{"slug": p.slug, "name": p.name} for p in pods])
-    handles_json = json.dumps(sorted({c.upwork_handle for p in pods for c in p.contractors}))
+def render_page(pods_with_reconciliation, unknown_handles, all_pods, roles):
+    """pods_with_reconciliation: list of (Pod, PodReconciliation) for the
+    dashboard section. all_pods/roles: every known pod and role, for the
+    admin tools' pod/role pickers (a pod can exist with no reconciliation
+    yet if it has no contractors)."""
+    dashboard_html = render_dashboard_section(pods_with_reconciliation, unknown_handles)
+
+    pods_json = json.dumps([{"slug": p.slug, "name": p.name} for p in all_pods])
+    handles_json = json.dumps(sorted({c.upwork_handle for p in all_pods for c in p.contractors}))
     roles_json = json.dumps(sorted(roles.keys()))
 
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Admin</title>
+<title>Pod Reconciliation</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
 <style>{CSS}</style>
@@ -53,7 +57,7 @@ def render_admin_page(pods, roles):
 <body>
 
 <div id="gate" class="wrap gate">
-  <h1>Admin</h1>
+  <h1>Pod Reconciliation</h1>
   <p class="muted">Internal use only.</p>
   <input type="password" id="gate-password" placeholder="Password" autocomplete="off" />
   <button id="gate-submit" class="btn btn-primary">Enter</button>
@@ -61,8 +65,11 @@ def render_admin_page(pods, roles):
 </div>
 
 <div id="app" class="wrap" style="display:none">
-  <h1>Admin</h1>
-  <p class="muted">Paste an exported Upwork timesheet CSV to see which handles aren't assigned to a pod/role yet, assign them, and run the report.</p>
+
+{dashboard_html}
+
+<h1 style="margin-top:48px;">Config</h1>
+<p class="muted">Assign new contractors to a pod/role, and run a fresh report.</p>
 
   <section class="card">
     <h2>GitHub access</h2>
@@ -121,7 +128,7 @@ def render_admin_page(pods, roles):
 
   <section class="card">
     <h2>Run Report</h2>
-    <p class="muted">Runs the reconciliation pipeline with the CSV pasted above and redeploys every pod's page. Takes a few minutes.</p>
+    <p class="muted">Runs the reconciliation pipeline with the CSV above and rebuilds this page. Takes a few minutes.</p>
     <button id="run-report-btn" class="btn">Run Report</button>
     <p id="run-status" class="muted" style="margin-top:8px;"></p>
   </section>
@@ -143,7 +150,8 @@ def render_admin_page(pods, roles):
 </html>"""
 
 
-CSS = """
+CSS = (
+    """
 :root {
   color-scheme: dark;
   --page: #1a1a1a;
@@ -154,6 +162,7 @@ CSS = """
   --border: rgba(255,255,255,0.10);
   --good: #0ca30c;
   --bad: #e66767;
+  --warn: #f9bc3c;
   --accent: #f9bc3c;
 }
 * { box-sizing: border-box; }
@@ -164,11 +173,12 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   padding: 40px 0 80px;
 }
-.wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
 .gate { max-width: 320px; padding-top: 120px; text-align: center; }
 h1 { font-size: 22px; margin: 0 0 8px; }
 h2 { font-size: 16px; margin: 0 0 6px; }
 .muted { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+a { color: var(--accent); }
 .error { color: var(--bad); font-size: 12.5px; }
 .card {
   background: var(--surface-1);
@@ -208,9 +218,6 @@ summary { cursor: pointer; color: var(--accent); }
 details ol { color: var(--text-secondary); padding-left: 20px; }
 details a { color: var(--accent); }
 .ok { color: var(--good); }
-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-th { color: var(--text-secondary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
 td select { min-width: 130px; }
 .drop-zone {
   border: 2px dashed var(--border);
@@ -222,7 +229,10 @@ td select { min-width: 130px; }
   cursor: pointer;
 }
 .drop-zone.drag-over { border-color: var(--accent); color: var(--text-primary); background: rgba(249,188,60,0.06); }
+.warning { background: rgba(249,188,60,0.12); border: 1px solid rgba(249,188,60,0.3); border-radius: 8px; padding: 10px 14px; font-size: 12.5px; color: var(--warn); margin: 16px 0; }
 """
+    + DASHBOARD_CSS
+)
 
 
 JS = """
@@ -574,7 +584,7 @@ JS = """
         var statusEl = document.getElementById('run-status');
         if (run && run.status === 'completed') {{
           statusEl.textContent = run.conclusion === 'success'
-            ? 'Done — reload a pod page to see the latest data.'
+            ? 'Done — reload the page to see the latest data.'
             : 'Run finished with status: ' + run.conclusion;
         }}
         pendingTriggerAt = null;
@@ -596,7 +606,7 @@ JS = """
     btn.disabled = true;
     if (!getToken()) {{ statusEl.textContent = 'Save a GitHub token above first.'; btn.disabled = false; return; }}
     var csv = document.getElementById('csv-input').value;
-    if (!csv.trim()) {{ statusEl.textContent = 'Paste a CSV above first.'; btn.disabled = false; return; }}
+    if (!csv.trim()) {{ statusEl.textContent = 'Drop or paste a CSV above first.'; btn.disabled = false; return; }}
 
     latestRun().then(function(run) {{
       if (isBusy(run)) {{
@@ -605,7 +615,7 @@ JS = """
         setTimeout(pollRunStatus, 15000);
         return;
       }}
-      if (!confirm('Run the reconciliation report now with this CSV? Redeploys every pod\\'s page.')) {{
+      if (!confirm('Run the reconciliation report now with this CSV? Rebuilds this whole page.')) {{
         statusEl.textContent = '';
         btn.disabled = false;
         return;

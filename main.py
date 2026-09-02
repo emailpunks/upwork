@@ -3,11 +3,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from pod_dashboard.admin_page import ADMIN_PATH, render_admin_page
 from pod_dashboard.config import PodConfigError, load_pods, load_roles, load_secrets
 from pod_dashboard.notion_client import NotionClient
+from pod_dashboard.page import render_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles as find_unknown_handles
-from pod_dashboard.render import render_index, render_pod_page
 from pod_dashboard.upwork_csv import parse_timesheet_csv
 
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -17,13 +16,7 @@ def run_for_pod(pod, submissions, notion_client):
     notion_records = []
     for brand in pod.brands:
         notion_records.extend(notion_client.query_task_records(brand.notion_database_id, brand.notion_property_map))
-
-    reconciliation = reconcile_pod(pod, submissions, notion_records)
-
-    pod_dir = OUTPUT_DIR / pod.slug
-    pod_dir.mkdir(parents=True, exist_ok=True)
-    (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation))
-    return reconciliation
+    return reconcile_pod(pod, submissions, notion_records)
 
 
 def main():
@@ -47,23 +40,17 @@ def main():
     submissions = parse_timesheet_csv(args.csv_path)
     notion_client = NotionClient(secrets.notion_token)
 
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    (OUTPUT_DIR / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
-
-    admin_dir = OUTPUT_DIR / ADMIN_PATH
-    admin_dir.mkdir(parents=True, exist_ok=True)
-    (admin_dir / "index.html").write_text(render_admin_page(all_pods, load_roles()))
-
     unknown = find_unknown_handles(all_pods, submissions)
     if unknown:
         print(f"Warning: unrecognized Upwork handle(s) in CSV: {', '.join(unknown)}", file=sys.stderr)
-    (OUTPUT_DIR / "index.html").write_text(render_index(pods, unknown_handles=unknown))
 
     succeeded, failed = [], []
+    pods_with_reconciliation = []
     for pod in pods:
         print(f"[{pod.name}] Fetching Notion data and reconciling...")
         try:
             reconciliation = run_for_pod(pod, submissions, notion_client)
+            pods_with_reconciliation.append((pod, reconciliation))
             hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
             code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
             print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code-count mismatches")
@@ -71,6 +58,10 @@ def main():
         except Exception as e:
             print(f"[{pod.name}] FAILED: {e}", file=sys.stderr)
             failed.append(pod.name)
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    (OUTPUT_DIR / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
+    (OUTPUT_DIR / "index.html").write_text(render_page(pods_with_reconciliation, unknown, all_pods, load_roles()))
 
     print(f"\n{len(succeeded)} succeeded, {len(failed)} failed.")
     if failed:

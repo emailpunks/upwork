@@ -9,11 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from pod_dashboard.admin_page import ADMIN_PATH, render_admin_page
 from pod_dashboard.config import load_pods, load_roles
 from pod_dashboard.notion_client import NotionTaskRecord
+from pod_dashboard.page import render_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles
-from pod_dashboard.render import render_index, render_pod_page
 from pod_dashboard.upwork_csv import parse_timesheet_csv
 
 FIXTURES = ROOT / "fixtures"
@@ -23,29 +22,27 @@ OUTPUT_DIR = ROOT / "output"
 def main():
     pods = load_pods(pod_data_dir=FIXTURES / "pod_data")
 
-    admin_dir = OUTPUT_DIR / ADMIN_PATH
-    admin_dir.mkdir(parents=True, exist_ok=True)
-    (admin_dir / "index.html").write_text(render_admin_page(pods, load_roles()))
-
     submissions = parse_timesheet_csv(FIXTURES / "sample_timesheet.csv")
     notion_records = [
         NotionTaskRecord(**row) for row in json.loads((FIXTURES / "notion_task_records.json").read_text())
     ]
 
-    OUTPUT_DIR.mkdir(exist_ok=True)
     unknown = unknown_handles(pods, submissions)
-    (OUTPUT_DIR / "index.html").write_text(render_index(pods, unknown_handles=unknown))
     if unknown:
         print(f"Unrecognized handle(s): {', '.join(unknown)}")
 
+    pods_with_reconciliation = []
     for pod in pods:
         reconciliation = reconcile_pod(pod, submissions, notion_records)
-        pod_dir = OUTPUT_DIR / pod.slug
-        pod_dir.mkdir(parents=True, exist_ok=True)
-        (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation))
+        pods_with_reconciliation.append((pod, reconciliation))
         hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
         code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
-        print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code-count mismatches -> {pod_dir / 'index.html'}")
+        print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code-count mismatches")
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    out_path = OUTPUT_DIR / "index.html"
+    out_path.write_text(render_page(pods_with_reconciliation, unknown, pods, load_roles()))
+    print(f"-> {out_path}")
 
 
 if __name__ == "__main__":
