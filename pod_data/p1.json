@@ -1,0 +1,25 @@
+{
+  "name": "P1",
+  "contractors": [
+    {
+      "name": "Angelica Bernaldez",
+      "upwork_handle": "875b8adc",
+      "role": "technician"
+    },
+    {
+      "name": "Mary Grace Malanyaon",
+      "upwork_handle": "rymagrace",
+      "role": "coordinator"
+    },
+    {
+      "name": "Peter Okunrounmu",
+      "upwork_handle": "sage-hermit",
+      "role": "designer"
+    },
+    {
+      "name": "TIEN NGUYEN PHAN THUY",
+      "upwork_handle": "771f3857f4de0699",
+      "role": "copywriter"
+    }
+  ]
+}
