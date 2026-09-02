@@ -10,6 +10,7 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 11.5px; text-tra
 .status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
 .status.ok { background: rgba(12,163,12,0.15); color: var(--good); }
 .status.bad { background: rgba(230,103,103,0.15); color: var(--bad); }
+.period-line { font-weight: 700; color: var(--text-primary); font-size: 13px; margin: 4px 0 0; }
 """
 
 
@@ -28,11 +29,11 @@ def _period_line(reconciliation):
         return ""
     if len(periods) == 1:
         date_from, date_to = periods[0]
-        return f'<p class="muted">Period: {escape(date_from)} &rarr; {escape(date_to)}</p>'
+        return f'<p class="period-line">Period: {escape(date_from)} &rarr; {escape(date_to)}</p>'
     # More than one period in this run (e.g. a CSV covering several weeks) —
     # list them all rather than assume a single one.
     joined = "; ".join(f"{escape(a)} &rarr; {escape(b)}" for a, b in periods)
-    return f'<p class="muted">Periods: {joined}</p>'
+    return f'<p class="period-line">Periods: {joined}</p>'
 
 
 def render_pod_tables(reconciliation):
@@ -65,10 +66,10 @@ def render_pod_tables(reconciliation):
 
     return f"""
 <p class="muted">{hours_mismatches} hours mismatch(es), {code_mismatches} code mismatch(es).</p>
-{period_line}
 
 <h2>Submitted time vs. code stamps</h2>
 <p class="muted">Does each submission's total time match what its logged codes add up to?</p>
+{period_line}
 <table>
 <thead><tr><th>Contractor</th><th>Submitted</th><th>Expected</th><th>Status</th><th>Detail</th></tr></thead>
 <tbody>
@@ -78,6 +79,7 @@ def render_pod_tables(reconciliation):
 
 <h2>Upwork codes vs. Notion master list</h2>
 <p class="muted">Does each submitted code exactly match one Notion generated for this contractor, and hasn't already been claimed in a previous run?</p>
+{period_line}
 <table>
 <thead><tr><th>Contractor</th><th>Code</th><th>Status</th><th>Detail</th></tr></thead>
 <tbody>
