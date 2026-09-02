@@ -31,14 +31,15 @@ def render_notion_master_list(notion_codes, used_codes):
     if nobody's claimed it yet. Returns an HTML fragment for embedding on
     the pod's own page — this is the audit view of the whole master list,
     independent of any particular CSV run."""
-    def sort_key(code):
-        created = code_created_date(code)
-        # Undated (unparseable) codes sort last rather than crashing on a
-        # None/datetime comparison.
-        return (created is None, created or datetime.min, code)
+    # (code, created) computed once per code, not once for sorting and
+    # again for display.
+    codes_with_dates = sorted(
+        ((code, code_created_date(code)) for code in notion_codes),
+        key=lambda pair: (pair[1] is None, pair[1] or datetime.min, pair[0]),
+    )
 
     rows = []
-    for code in sorted(notion_codes, key=sort_key):
+    for code, created in codes_with_dates:
         claims = used_codes.get(code, {})
         if claims:
             status_html = '<span class="status ok">Claimed</span>'
@@ -46,7 +47,6 @@ def render_notion_master_list(notion_codes, used_codes):
         else:
             status_html = '<span class="status neutral">Unclaimed</span>'
             detail = "not yet claimed by anyone"
-        created = code_created_date(code)
         created_text = created.strftime("%Y-%m-%d %H:%M") if created else "—"
         rows.append(
             f"""<tr>

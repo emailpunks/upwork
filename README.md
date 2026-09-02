@@ -42,11 +42,15 @@ rendering) — see the git history for the GraphQL version this replaced.
 
 Each CSV row is one contractor's submission for a week: `Date from`,
 `Date to`, `Talent` (`"Name (upwork_handle)"`), `Hours`, and `Memo` — a
-list of task stamps like `CT11626081516482608231519`, separated by
-newlines or spaces. The **whole stamp** is kept (not just the two-letter
-prefix): the prefix alone drives the hours check (its fixed duration from
-`pods.yaml`), but the full stamp is what gets checked for an exact match
-against Notion's master list. See `pod_dashboard/upwork_csv.py`.
+list of task stamps, separated by newlines or spaces. Two stamp shapes
+show up: `CT11626081516482608231519` (legacy — all digits after the
+prefix) and `HE12608171600VENB` (current — a 4-letter brand suffix after
+the digits, which is also how a code's creation date gets derived back
+out — see `notion_client.py`'s `code_created_date`). The **whole stamp**
+is kept either way (not just the two-letter prefix): the prefix alone
+drives the hours check (its fixed duration from `pods.yaml`), but the
+full stamp is what gets checked for an exact match against Notion's
+master list. See `pod_dashboard/upwork_csv.py`.
 
 ## Setup
 
@@ -71,9 +75,8 @@ GitHub Actions secret.
 ### 3. Fill in `pods.yaml`
 
 Roles and task codes are already filled in (shared across every pod — see
-the top of the file). Pods are named P1, P2, etc.; brands (which Notion
-database each pod's tasks live in) need to be added by hand once known.
-**Contractors don't** — see "The pages" below. Note
+the top of the file). Pods are named P1, P2, etc. **Neither brands nor
+contractors need to be added here by hand** — see "The pages" below. Note
 `contractors[].upwork_handle` — that's the short handle Upwork shows in
 parentheses after a contractor's name (e.g. `Jane Doe (abc12de)`), not
 their display name.

@@ -9,9 +9,9 @@ HANDLE_RE = re.compile(r"\(([^)]+)\)\s*$")
 # Each stamp in the Memo field looks like "CT11626081516482608231519"
 # (legacy scheme) or "HE12608171600VENB" (current scheme — Notion's
 # formula appends a trailing brand-abbreviation suffix after the digits,
-# see render.py's _created_date). The full stamp is kept, since it's
-# checked for an exact match against the full code Notion generated for
-# that task — see reconcile.py. Stamps can be separated by newlines OR
+# see notion_client.py's code_created_date). The full stamp is kept, since
+# it's checked for an exact match against the full code Notion generated
+# for that task — see reconcile.py. Stamps can be separated by newlines OR
 # spaces within the same memo, so this searches the whole memo text rather
 # than splitting into lines first.
 STAMP_RE = re.compile(r"[A-Za-z]{2}\d+[A-Za-z]*")

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from pod_dashboard.config import PodConfigError, load_pods, load_roles, load_secrets
 from pod_dashboard.ledger import load_used_codes, save_used_codes
-from pod_dashboard.notion_client import NotionClient, code_created_date
+from pod_dashboard.notion_client import NotionClient, drop_codes_before
 from pod_dashboard.page import render_index_page, render_pod_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles as find_unknown_handles
 from pod_dashboard.upwork_csv import parse_timesheet_csv
@@ -22,15 +21,9 @@ def run_for_pod(pod, submissions, notion_client):
             print(f"[{pod.name}] {brand.name} / {database_id}: pulled {len(records)} Task Code(s) from Notion")
             notion_records.extend(records)
 
-    if pod.ignore_codes_before:
-        cutoff = datetime.strptime(pod.ignore_codes_before, "%Y-%m-%d")
-        before = len(notion_records)
-        # A code whose creation date can't be determined (doesn't fit the
-        # current formula's shape) is kept rather than guessed away.
-        notion_records = [
-            r for r in notion_records if (code_created_date(r.task_code) or cutoff) >= cutoff
-        ]
-        print(f"[{pod.name}] Dropped {before - len(notion_records)} code(s) created before {pod.ignore_codes_before}")
+    notion_records, dropped = drop_codes_before(notion_records, pod.ignore_codes_before)
+    if dropped:
+        print(f"[{pod.name}] Dropped {dropped} code(s) created before {pod.ignore_codes_before}")
     print(f"[{pod.name}] {len(notion_records)} Notion task code(s) total across {len(pod.brands)} brand(s)")
 
     used_codes = load_used_codes(pod.slug)

@@ -1,7 +1,8 @@
 """Two kinds of page, both password-gated: a landing page (pod navigation +
 the GitHub token, which is shared across pods via localStorage) and one
-page per pod (CSV drop zone, unassigned-handle assignment, Run Report
-button, and that pod's own reconciliation tables).
+page per pod (Brands, CSV drop zone + unassigned-handle assignment, Run
+Report, that pod's reconciliation tables, a cutoff date, and the Notion
+master list).
 
 Deliberately NOT real security: the password gate is a client-side SHA-256
 comparison (trivially bypassable via view-source), and the pages' only real
@@ -12,12 +13,13 @@ every pod page on this site since localStorage is per-origin, never written
 to the repo or bundled into the deployed source. Same mechanism as the
 Weekly/Monthly dashboards' Admin pages, same password by choice.
 
-Assignment writes go straight to pod_data/{slug}.json in this repo via the
-GitHub Contents API (GET for the current sha, then PUT the updated JSON) —
-see config.py's _load_pod_overlay()/load_pods() for how the pipeline reads
-it back. Assigning someone to a pod slug that doesn't exist in pods.yaml
-yet creates that pod entirely from pod_data (no brands until those are
-added by hand — this only manages contractor-to-pod-and-role assignment).
+Every write (contractor assignment, brands, cutoff date) goes straight to
+pod_data/{slug}.json in this repo via the GitHub Contents API (GET for the
+current sha, then PUT the updated JSON — see ADMIN_JS's ghRequest and the
+saveOnePod/add-brand-btn/save-cutoff-btn handlers) — see config.py's
+_load_pod_overlay()/load_pods() for how the pipeline reads it back.
+Writing to a pod slug that doesn't exist in pods.yaml yet creates that pod
+entirely from pod_data (no brands until added there, or by hand).
 """
 
 import json
@@ -107,8 +109,10 @@ def render_index_page(all_pods):
 
 
 def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, notion_codes=None, used_codes=None):
+    notion_codes = notion_codes or set()
+    used_codes = used_codes or {}
     tables_html = render_pod_tables(reconciliation)
-    master_list_html = render_notion_master_list(notion_codes or set(), used_codes or {})
+    master_list_html = render_notion_master_list(notion_codes, used_codes)
 
     unknown_warning = ""
     if unknown_handles:
@@ -205,7 +209,7 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, 
 </section>
 
 <details style="margin-top:8px;">
-<summary>Notion master list ({len(notion_codes or ())} codes)</summary>
+<summary>Notion master list ({len(notion_codes)} codes)</summary>
 {master_list_html}
 </details>
 """
@@ -402,6 +406,28 @@ ADMIN_JS = """
     return fetch('https://api.github.com/repos/' + OWNER + '/' + REPO + '/' + path, opts);
   }}
 
+  // ---- pod_data/{{slug}}.json read/write, shared by every save flow below
+  // (contractor assignment, brands, cutoff date) ----
+  function loadPodData(slug, defaults) {{
+    return ghRequest('GET', 'contents/pod_data/' + slug + '.json').then(function(resp) {{
+      if (resp.status === 404) {{ return {{ data: defaults, sha: null }}; }}
+      if (!resp.ok) return resp.text().then(function(t) {{ throw new Error('GitHub GET failed (' + resp.status + '): ' + t); }});
+      return resp.json().then(function(json) {{
+        return {{ data: JSON.parse(b64DecodeUtf8(json.content.replace(/\\n/g, ''))), sha: json.sha }};
+      }});
+    }});
+  }}
+
+  function savePodData(slug, data, sha, message) {{
+    var body = {{ message: message, content: b64EncodeUtf8(JSON.stringify(data, null, 2)) }};
+    if (sha) body.sha = sha;
+    return ghRequest('PUT', 'contents/pod_data/' + slug + '.json', body).then(function(resp) {{
+      return resp.json().then(function(json) {{
+        if (!resp.ok) throw new Error(json.message || ('GitHub PUT failed (' + resp.status + ')'));
+      }});
+    }});
+  }}
+
   // ---- CSV parsing (RFC4180-ish: handles quoted fields with embedded
   // commas/newlines and doubled-quote escaping, since the Memo column has
   // both) ----
@@ -588,17 +614,8 @@ ADMIN_JS = """
 
     function saveOnePod(slug) {{
       var podMeta = PODS.filter(function(p) {{ return p.slug === slug; }})[0];
-      return ghRequest('GET', 'contents/pod_data/' + slug + '.json').then(function(resp) {{
-        if (resp.status === 404) {{
-          return {{ data: {{ name: (podMeta ? podMeta.name : slug), contractors: [] }}, sha: null }};
-        }}
-        if (!resp.ok) return resp.text().then(function(t) {{ throw new Error('GitHub GET failed (' + resp.status + '): ' + t); }});
-        return resp.json().then(function(json) {{
-          var data = JSON.parse(b64DecodeUtf8(json.content.replace(/\\n/g, '')));
-          if (!data.contractors) data.contractors = [];
-          return {{ data: data, sha: json.sha }};
-        }});
-      }}).then(function(current) {{
+      return loadPodData(slug, {{ name: (podMeta ? podMeta.name : slug), contractors: [] }}).then(function(current) {{
+        if (!current.data.contractors) current.data.contractors = [];
         var existingHandles = current.data.contractors.map(function(c) {{ return c.upwork_handle; }});
         byPod[slug].forEach(function(c) {{
           if (existingHandles.indexOf(c.upwork_handle) === -1) {{
@@ -606,16 +623,7 @@ ADMIN_JS = """
             existingHandles.push(c.upwork_handle);
           }}
         }});
-        var body = {{
-          message: 'Assign contractor(s) to pod ' + slug + ' via the pod page',
-          content: b64EncodeUtf8(JSON.stringify(current.data, null, 2)),
-        }};
-        if (current.sha) body.sha = current.sha;
-        return ghRequest('PUT', 'contents/pod_data/' + slug + '.json', body).then(function(resp) {{
-          return resp.json().then(function(json) {{
-            if (!resp.ok) throw new Error(json.message || ('GitHub PUT failed (' + resp.status + ')'));
-          }});
-        }});
+        return savePodData(slug, current.data, current.sha, 'Assign contractor(s) to pod ' + slug + ' via the pod page');
       }});
     }}
 
@@ -640,17 +648,8 @@ ADMIN_JS = """
     if (!name || ids.length === 0) {{ status.textContent = 'Enter a brand name and at least one database ID.'; return; }}
 
     status.textContent = 'Saving...';
-    ghRequest('GET', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json').then(function(resp) {{
-      if (resp.status === 404) {{
-        return {{ data: {{ name: DEFAULT_POD_SLUG, contractors: [], brands: [] }}, sha: null }};
-      }}
-      if (!resp.ok) return resp.text().then(function(t) {{ throw new Error('GitHub GET failed (' + resp.status + '): ' + t); }});
-      return resp.json().then(function(json) {{
-        var data = JSON.parse(b64DecodeUtf8(json.content.replace(/\\n/g, '')));
-        if (!data.brands) data.brands = [];
-        return {{ data: data, sha: json.sha }};
-      }});
-    }}).then(function(current) {{
+    loadPodData(DEFAULT_POD_SLUG, {{ name: DEFAULT_POD_SLUG, contractors: [], brands: [] }}).then(function(current) {{
+      if (!current.data.brands) current.data.brands = [];
       var existing = current.data.brands.filter(function(b) {{ return b.name === name; }})[0];
       if (existing) {{
         var idSet = {{}};
@@ -659,16 +658,7 @@ ADMIN_JS = """
       }} else {{
         current.data.brands.push({{ name: name, notion_database_ids: ids }});
       }}
-      var body = {{
-        message: 'Add/update brand ' + name + ' for pod ' + DEFAULT_POD_SLUG,
-        content: b64EncodeUtf8(JSON.stringify(current.data, null, 2)),
-      }};
-      if (current.sha) body.sha = current.sha;
-      return ghRequest('PUT', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json', body).then(function(resp) {{
-        return resp.json().then(function(json) {{
-          if (!resp.ok) throw new Error(json.message || ('GitHub PUT failed (' + resp.status + ')'));
-        }});
-      }});
+      return savePodData(DEFAULT_POD_SLUG, current.data, current.sha, 'Add/update brand ' + name + ' for pod ' + DEFAULT_POD_SLUG);
     }}).then(function() {{
       document.getElementById('new-brand-name').value = '';
       document.getElementById('new-brand-db-ids').value = '';
@@ -686,26 +676,9 @@ ADMIN_JS = """
     if (!date) {{ statusEl.textContent = 'Pick a date first.'; return; }}
 
     statusEl.textContent = 'Saving...';
-    ghRequest('GET', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json').then(function(resp) {{
-      if (resp.status === 404) {{
-        return {{ data: {{ name: DEFAULT_POD_SLUG, contractors: [], brands: [] }}, sha: null }};
-      }}
-      if (!resp.ok) return resp.text().then(function(t) {{ throw new Error('GitHub GET failed (' + resp.status + '): ' + t); }});
-      return resp.json().then(function(json) {{
-        return {{ data: JSON.parse(b64DecodeUtf8(json.content.replace(/\\n/g, ''))), sha: json.sha }};
-      }});
-    }}).then(function(current) {{
+    loadPodData(DEFAULT_POD_SLUG, {{ name: DEFAULT_POD_SLUG, contractors: [], brands: [] }}).then(function(current) {{
       current.data.ignore_codes_before = date;
-      var body = {{
-        message: 'Set cutoff date ' + date + ' for pod ' + DEFAULT_POD_SLUG,
-        content: b64EncodeUtf8(JSON.stringify(current.data, null, 2)),
-      }};
-      if (current.sha) body.sha = current.sha;
-      return ghRequest('PUT', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json', body).then(function(resp) {{
-        return resp.json().then(function(json) {{
-          if (!resp.ok) throw new Error(json.message || ('GitHub PUT failed (' + resp.status + ')'));
-        }});
-      }});
+      return savePodData(DEFAULT_POD_SLUG, current.data, current.sha, 'Set cutoff date ' + date + ' for pod ' + DEFAULT_POD_SLUG);
     }}).then(function() {{
       statusEl.innerHTML = '<span class="ok">Saved. Takes effect on the next report run.</span>';
     }}).catch(function(err) {{

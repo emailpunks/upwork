@@ -33,6 +33,19 @@ def code_created_date(code):
         return None
 
 
+def drop_codes_before(records, cutoff_date):
+    """records: a list of NotionTaskRecord. cutoff_date: an ISO "YYYY-MM-DD"
+    string (a pod's ignore_codes_before), or falsy to skip filtering
+    entirely. Returns (kept_records, dropped_count) — a record whose
+    creation date can't be determined is kept rather than guessed away.
+    Shared by main.py (real runs) and scripts/demo.py (fixtures)."""
+    if not cutoff_date:
+        return records, 0
+    cutoff = datetime.strptime(cutoff_date, "%Y-%m-%d")
+    kept = [r for r in records if (code_created_date(r.task_code) or cutoff) >= cutoff]
+    return kept, len(records) - len(kept)
+
+
 @dataclass
 class NotionTaskRecord:
     task_code: str

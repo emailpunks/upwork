@@ -26,7 +26,6 @@ class PodConfigError(RuntimeError):
 
 @dataclass
 class TaskCode:
-    code: str
     label: str
     minutes: int
 
@@ -89,7 +88,7 @@ def load_secrets():
 
 def _build_role(name, entry):
     task_codes = {
-        code: TaskCode(code=code, label=data["label"], minutes=data["minutes"])
+        code: TaskCode(label=data["label"], minutes=data["minutes"])
         for code, data in (entry.get("task_codes") or {}).items()
     }
     return Role(name=name, task_codes=task_codes)
