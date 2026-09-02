@@ -25,7 +25,9 @@ def run_for_pod(pod, submissions, notion_client):
     used_codes = load_used_codes(pod.slug)
     reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
     save_used_codes(pod.slug, used_codes)  # reconcile_pod mutates used_codes with any newly verified code
-    return reconciliation
+
+    notion_codes = {r.task_code for r in notion_records}
+    return reconciliation, notion_codes, used_codes
 
 
 def main():
@@ -62,10 +64,11 @@ def main():
     for pod in pods:
         print(f"[{pod.name}] Fetching Notion data and reconciling...")
         try:
-            reconciliation = run_for_pod(pod, submissions, notion_client)
+            reconciliation, notion_codes, used_codes = run_for_pod(pod, submissions, notion_client)
             pod_dir = OUTPUT_DIR / pod.slug
             pod_dir.mkdir(parents=True, exist_ok=True)
-            (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation, all_pods, roles, unknown))
+            page_html = render_pod_page(pod, reconciliation, all_pods, roles, unknown, notion_codes, used_codes)
+            (pod_dir / "index.html").write_text(page_html)
             hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
             code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
             print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code mismatches")

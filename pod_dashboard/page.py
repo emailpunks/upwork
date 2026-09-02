@@ -23,7 +23,7 @@ added by hand — this only manages contractor-to-pod-and-role assignment).
 import json
 from html import escape
 
-from .render import TABLE_CSS, render_pod_tables
+from .render import TABLE_CSS, render_notion_master_list, render_pod_tables
 
 GITHUB_OWNER = "emailpunks"
 GITHUB_REPO = "upwork"
@@ -106,8 +106,9 @@ def render_index_page(all_pods):
     return _page_shell("Pod Reconciliation", app_body, TOKEN_JS)
 
 
-def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None):
+def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, notion_codes=None, used_codes=None):
     tables_html = render_pod_tables(reconciliation)
+    master_list_html = render_notion_master_list(notion_codes or set(), used_codes or {})
 
     unknown_warning = ""
     if unknown_handles:
@@ -192,6 +193,11 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None):
 </section>
 
 {tables_html}
+
+<details style="margin-top:8px;">
+<summary>Notion master list ({len(notion_codes or ())} codes)</summary>
+{master_list_html}
+</details>
 """
     script = ADMIN_JS.format(
         admin_owner=GITHUB_OWNER,

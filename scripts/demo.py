@@ -42,9 +42,11 @@ def main():
         # exercised by main.py's real runs, not this visual-check script.
         used_codes = load_used_codes(pod.slug, used_codes_dir=FIXTURES / "used_codes")
         reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
+        notion_codes = {r.task_code for r in notion_records}
         pod_dir = OUTPUT_DIR / pod.slug
         pod_dir.mkdir(parents=True, exist_ok=True)
-        (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation, pods, roles, unknown))
+        page_html = render_pod_page(pod, reconciliation, pods, roles, unknown, notion_codes, used_codes)
+        (pod_dir / "index.html").write_text(page_html)
         hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
         code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
         print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code mismatches -> {pod_dir / 'index.html'}")
