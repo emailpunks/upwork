@@ -16,7 +16,8 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 def run_for_pod(pod, submissions, notion_client):
     notion_records = []
     for brand in pod.brands:
-        notion_records.extend(notion_client.query_task_records(brand.notion_database_id, brand.notion_property_map))
+        for database_id in brand.notion_database_ids:
+            notion_records.extend(notion_client.query_task_records(database_id, brand.notion_property_map))
 
     used_codes = load_used_codes(pod.slug)
     reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)

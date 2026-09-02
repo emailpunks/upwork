@@ -121,16 +121,21 @@ browser), so it's only asked once per browser.
 - **Landing page** (`/`): lists every pod, and holds the GitHub personal
   access token — entered once here, kept in the browser's local storage,
   shared across every pod page on the site since it's the same origin.
-- **Each pod's own page** (`/<slug>/`): drop a timesheet CSV to see
-  handles in it that aren't assigned to a contractor in any pod yet —
-  each shows a Pod + Role picker (defaulting to the current pod), pick
-  both and save, no YAML editing. New pods can be created inline (type a
-  name like "P2", click "Add to pod list") — a pod created this way has no
-  brands until those are added to `pods.yaml` by hand. Below that, a Run
-  Report button re-runs the whole pipeline with that CSV and rebuilds
-  every pod's page — same trigger as the GitHub Actions "Run workflow"
-  button, without leaving the page. Then that pod's own reconciliation
-  tables.
+- **Each pod's own page** (`/<slug>/`):
+  - **Brands** — add a brand by name plus one or more Notion database IDs
+    (one per line); adding the same brand name again appends new IDs to
+    it rather than replacing it. No YAML editing required, though the
+    Notion integration still needs to be shared with each database first
+    (see Setup above).
+  - **Timesheet CSV** — drop a file to see handles in it that aren't
+    assigned to a contractor in any pod yet, each with a Pod + Role
+    picker (defaulting to the current pod). New pods can be created
+    inline too (type a name like "P2", click "Add to pod list") — a pod
+    created this way starts with no brands until added here.
+  - **Run Report** — re-runs the whole pipeline with that CSV and
+    rebuilds every pod's page, same trigger as the GitHub Actions "Run
+    workflow" button, without leaving the page.
+  - Then that pod's own reconciliation tables.
 
 Assignments are written to `pod_data/{slug}.json` (one file per pod,
 merged with `pods.yaml` at build time — see `pod_dashboard/config.py`).

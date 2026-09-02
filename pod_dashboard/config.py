@@ -1,6 +1,6 @@
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -13,6 +13,11 @@ POD_DATA_DIR = ROOT / "pod_data"
 SECRET_ENV_VARS = {
     "notion_token": "NOTION_TOKEN",
 }
+
+# Every brand's Notion database uses this property name for the task code,
+# by convention — see pods.yaml. Only needs overriding per-brand if some
+# database is set up differently.
+DEFAULT_NOTION_PROPERTY_MAP = {"task_code": "Task Code"}
 
 
 class PodConfigError(RuntimeError):
@@ -42,8 +47,8 @@ class Contractor:
 @dataclass
 class Brand:
     name: str
-    notion_database_id: str
-    notion_property_map: dict
+    notion_database_ids: list  # a brand can span more than one Notion database
+    notion_property_map: dict = field(default_factory=lambda: dict(DEFAULT_NOTION_PROPERTY_MAP))
 
 
 @dataclass
@@ -93,19 +98,19 @@ def _build_brand(entry):
     try:
         return Brand(
             name=entry["name"],
-            notion_database_id=entry["notion_database_id"],
-            notion_property_map=entry["notion_property_map"],
+            notion_database_ids=entry["notion_database_ids"],
+            notion_property_map=entry.get("notion_property_map") or dict(DEFAULT_NOTION_PROPERTY_MAP),
         )
     except KeyError as e:
         raise PodConfigError(f"brand entry {entry!r} is missing required field {e}")
 
 
 def _load_pod_overlay(slug, pod_data_dir):
-    """Admin-page-managed contractor additions for one pod — written
-    straight to pod_data/{slug}.json by the Admin page via the GitHub
-    Contents API (see page.py). Absent for any pod the Admin page
-    hasn't touched. A slug with no pods.yaml entry at all becomes a
-    brand-new pod defined entirely by its overlay file."""
+    """Admin-page-managed contractor/brand additions for one pod — written
+    straight to pod_data/{slug}.json by the pod's own page via the GitHub
+    Contents API (see page.py). Absent for any pod the page hasn't touched.
+    A slug with no pods.yaml entry at all becomes a brand-new pod defined
+    entirely by its overlay file."""
     path = pod_data_dir / f"{slug}.json"
     if not path.exists():
         return {}
@@ -131,7 +136,7 @@ def _build_contractors(entries, roles, slug):
 def load_roles(path=PODS_YAML):
     """Roles (and their task codes) are shared across every pod, defined once
     at the top level rather than duplicated per pod. Exposed standalone
-    (not just via load_pods) so callers like the Admin page can get the role
+    (not just via load_pods) so callers like the pod pages can get the role
     list without needing any pod to exist."""
     with open(path) as f:
         raw = yaml.safe_load(f) or {}
@@ -154,28 +159,32 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
 
         seen_slugs.add(slug)
         overlay = _load_pod_overlay(slug, pod_data_dir)
+
         existing_handles = {c["upwork_handle"] for c in entry.get("contractors", [])}
         overlay_contractors = [
             c for c in overlay.get("contractors", []) if c.get("upwork_handle") not in existing_handles
         ]
-
         contractors = _build_contractors(entry.get("contractors", []) + overlay_contractors, roles, slug)
-        brands = [_build_brand(b) for b in entry.get("brands", [])]
+
+        existing_brand_names = {b["name"] for b in entry.get("brands", [])}
+        overlay_brands = [b for b in overlay.get("brands", []) if b.get("name") not in existing_brand_names]
+        brands = [_build_brand(b) for b in entry.get("brands", []) + overlay_brands]
 
         pods.append(Pod(slug=slug, name=entry.get("name", slug), brands=brands, contractors=contractors, roles=roles))
 
-    # Pods created entirely through the Admin page (assigning someone to a
-    # pod slug that doesn't exist in pods.yaml yet) live only in
-    # pod_data/{slug}.json — no brands until those are configured by hand.
+    # Pods created entirely through a pod page (adding a contractor or brand
+    # to a pod slug that doesn't exist in pods.yaml yet) live only in
+    # pod_data/{slug}.json.
     if pod_data_dir.exists():
         for data_path in sorted(pod_data_dir.glob("*.json")):
             slug = data_path.stem
             if slug in seen_slugs:
                 continue
             overlay = _load_pod_overlay(slug, pod_data_dir)
-            if not overlay.get("contractors"):
+            if not overlay.get("contractors") and not overlay.get("brands"):
                 continue
-            contractors = _build_contractors(overlay["contractors"], roles, slug)
-            pods.append(Pod(slug=slug, name=overlay.get("name", slug), brands=[], contractors=contractors, roles=roles))
+            contractors = _build_contractors(overlay.get("contractors", []), roles, slug)
+            brands = [_build_brand(b) for b in overlay.get("brands", [])]
+            pods.append(Pod(slug=slug, name=overlay.get("name", slug), brands=brands, contractors=contractors, roles=roles))
 
     return pods

@@ -18,18 +18,18 @@
 #   ledger (pod_dashboard/ledger.py) — Notion itself has no per-contractor
 #   assignment, a code is just a ticket any pod member can legitimately
 #   submit once each.
-# - pods[].brands[].notion_database_id is the Notion database this brand's
-#   completed-task log lives in — just a list of tickets/codes, no
-#   assignee. notion_property_map only needs "task_code" (the Notion
-#   property holding the full generated code), named per-brand since
-#   property names aren't assumed to be uniform across brands.
+# - pods[].brands[].notion_database_ids is the list of Notion databases
+#   this brand's completed-task log lives in (a brand can span more than
+#   one) — just tickets/codes, no assignee. notion_property_map only
+#   needs "task_code" (the Notion property holding the full generated
+#   code) and defaults to "Task Code" if omitted — only set it per-brand
+#   if some database is set up differently.
 #
-# Contractors don't have to be added here by hand — the Admin page lets you
-# assign an unrecognized Upwork handle (seen in an uploaded CSV) to a pod
-# and role directly, no YAML editing required. Those assignments live in
-# pod_data/{slug}.json (see pod_dashboard/config.py) and are merged in on
-# top of whatever's defined here, including for pods that don't have a
-# pods.yaml entry at all yet.
+# Contractors and brands don't have to be added here by hand — each pod's
+# own page has a UI for both (no YAML editing required). Those additions
+# live in pod_data/{slug}.json (see pod_dashboard/config.py) and are
+# merged in on top of whatever's defined here, including for pods that
+# don't have a pods.yaml entry at all yet.
 # TEMPORARY — the old (pre-rename) code scheme, still showing up in real
 # Upwork submissions. Unlike the new scheme, these aren't role-specific
 # (same code = same duration regardless of role). Merged into every role
@@ -73,11 +73,19 @@ roles:
       SM: { label: "SMS Build", minutes: 20 }
       HF: { label: "Footer Build", minutes: 20 }
 
-# Pods are named P1, P2, etc. Brands (which Notion database each pod's
-# tasks live in) still need to be added here by hand, once known — the
-# Admin page only manages contractor-to-pod-and-role assignment.
+# Pods are named P1, P2, etc.
 pods:
   - slug: p1
     name: "P1"
-    brands: []
+    brands:
+      - name: "CologneCurators"
+        notion_database_ids:
+          - "c39caf454d7d82d4854901f2c0a0b179"
+          - "573caf454d7d83f6897c81ddb22e37cd"
+          - "e98caf454d7d825790f6010c6cad43a4"
+      - name: "Venba"
+        notion_database_ids:
+          - "17ecaf454d7d8324ab9281a8f993161d"
+          - "e9acaf454d7d834e9f9301b1acfad090"
+          - "f9fcaf454d7d83debeeb8130c9cd9e30"
     contractors: []

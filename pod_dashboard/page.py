@@ -121,10 +121,33 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None):
     handles_json = json.dumps(sorted({c.upwork_handle for p in all_pods for c in p.contractors}))
     roles_json = json.dumps(sorted(roles.keys()))
 
+    brands_html = "\n".join(
+        f'<div class="row"><div><strong>{escape(b.name)}</strong><br>'
+        f'<span class="muted">{len(b.notion_database_ids)} database(s): {escape(", ".join(b.notion_database_ids))}</span></div></div>'
+        for b in pod.brands
+    ) or '<p class="muted">No brands configured yet.</p>'
+
     app_body = f"""
 <p class="muted"><a href="../">&larr; All pods</a></p>
 <h1>{escape(pod.name)}</h1>
 {unknown_warning}
+
+<section class="card">
+  <h2>Brands</h2>
+  <p class="muted">Notion databases this pod's codes get checked against.</p>
+  <div id="brands-list">
+{brands_html}
+  </div>
+  <div class="row" style="margin-top:14px;">
+    <input type="text" id="new-brand-name" placeholder="Brand name, e.g. CologneCurators" />
+  </div>
+  <textarea id="new-brand-db-ids" rows="4" placeholder="One Notion database ID per line" style="margin-top:8px;"></textarea>
+  <div class="row" style="margin-top:10px;">
+    <button id="add-brand-btn" class="btn btn-primary">Add / Update Brand</button>
+  </div>
+  <p class="muted">If the brand name already exists, these database IDs are added to it rather than replacing it.</p>
+  <p id="brand-save-status" class="muted"></p>
+</section>
 
 <section class="card">
   <h2>Timesheet CSV</h2>
@@ -585,6 +608,55 @@ ADMIN_JS = """
       unassigned = unassigned.filter(function(t, idx) {{ return assignedIdx.indexOf(idx) === -1; }});
       renderUnassignedTable();
       status.innerHTML = '<span class="ok">Saved. Takes effect on the next report run.</span>';
+    }}).catch(function(err) {{
+      status.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
+    }});
+  }});
+
+  // ---- Brands ----
+  document.getElementById('add-brand-btn').addEventListener('click', function() {{
+    var status = document.getElementById('brand-save-status');
+    if (!getToken()) {{ status.innerHTML = '<span class="error">Set a GitHub token on the main page first.</span>'; return; }}
+
+    var name = document.getElementById('new-brand-name').value.trim();
+    var ids = document.getElementById('new-brand-db-ids').value
+      .split('\\n').map(function(s) {{ return s.trim(); }}).filter(function(s) {{ return s.length > 0; }});
+    if (!name || ids.length === 0) {{ status.textContent = 'Enter a brand name and at least one database ID.'; return; }}
+
+    status.textContent = 'Saving...';
+    ghRequest('GET', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json').then(function(resp) {{
+      if (resp.status === 404) {{
+        return {{ data: {{ name: DEFAULT_POD_SLUG, contractors: [], brands: [] }}, sha: null }};
+      }}
+      if (!resp.ok) return resp.text().then(function(t) {{ throw new Error('GitHub GET failed (' + resp.status + '): ' + t); }});
+      return resp.json().then(function(json) {{
+        var data = JSON.parse(b64DecodeUtf8(json.content.replace(/\\n/g, '')));
+        if (!data.brands) data.brands = [];
+        return {{ data: data, sha: json.sha }};
+      }});
+    }}).then(function(current) {{
+      var existing = current.data.brands.filter(function(b) {{ return b.name === name; }})[0];
+      if (existing) {{
+        var idSet = {{}};
+        (existing.notion_database_ids || []).concat(ids).forEach(function(id) {{ idSet[id] = true; }});
+        existing.notion_database_ids = Object.keys(idSet);
+      }} else {{
+        current.data.brands.push({{ name: name, notion_database_ids: ids }});
+      }}
+      var body = {{
+        message: 'Add/update brand ' + name + ' for pod ' + DEFAULT_POD_SLUG,
+        content: b64EncodeUtf8(JSON.stringify(current.data, null, 2)),
+      }};
+      if (current.sha) body.sha = current.sha;
+      return ghRequest('PUT', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json', body).then(function(resp) {{
+        return resp.json().then(function(json) {{
+          if (!resp.ok) throw new Error(json.message || ('GitHub PUT failed (' + resp.status + ')'));
+        }});
+      }});
+    }}).then(function() {{
+      document.getElementById('new-brand-name').value = '';
+      document.getElementById('new-brand-db-ids').value = '';
+      status.innerHTML = '<span class="ok">Saved. Takes effect on the next report run — reload the page to see it in the list above.</span>';
     }}).catch(function(err) {{
       status.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
     }});
