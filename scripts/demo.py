@@ -4,6 +4,7 @@ CSV export and live Notion calls, so the logic can be checked visually
 without either. See README.md."""
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -11,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from pod_dashboard.config import load_pods, load_roles
 from pod_dashboard.ledger import load_used_codes
-from pod_dashboard.notion_client import NotionTaskRecord
+from pod_dashboard.notion_client import NotionTaskRecord, code_created_date
 from pod_dashboard.page import render_index_page, render_pod_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles
 from pod_dashboard.upwork_csv import parse_timesheet_csv
@@ -41,7 +42,10 @@ def main():
         # this script doesn't mutate the fixture — the ledger's persistence is
         # exercised by main.py's real runs, not this visual-check script.
         used_codes = load_used_codes(pod.slug, used_codes_dir=FIXTURES / "used_codes")
-        notion_records = [r for r in all_notion_records if r.task_code not in pod.ignored_codes]
+        notion_records = all_notion_records
+        if pod.ignore_codes_before:
+            cutoff = datetime.strptime(pod.ignore_codes_before, "%Y-%m-%d")
+            notion_records = [r for r in notion_records if (code_created_date(r.task_code) or cutoff) >= cutoff]
         reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
         notion_codes = {r.task_code for r in notion_records}
         pod_dir = OUTPUT_DIR / pod.slug

@@ -135,13 +135,13 @@ browser), so it's only asked once per browser.
   - **Run Report** — re-runs the whole pipeline with that CSV and
     rebuilds every pod's page, same trigger as the GitHub Actions "Run
     workflow" button, without leaving the page.
+  - **Cutoff date** — codes created before this date are dropped entirely,
+    right after the Notion pull, and never come back on future runs.
+    Creation date is derived from the code itself (see
+    `notion_client.py`'s `code_created_date`), not stored separately.
   - Then that pod's own reconciliation tables, and a collapsible **Notion
-    master list** — every code pulled from Notion, its derived creation
-    date (parsed back out of the code itself — see `render.py`'s
-    `_created_date`), and whether it's been claimed. Each row has an
-    "Ignore" button, or paste several at once, to permanently exclude old
-    codes from this pod — they're dropped right after the Notion pull on
-    every future run, so they won't reappear.
+    master list** — every code pulled from Notion (after the cutoff),
+    its derived creation date, and whether it's been claimed.
 
 Assignments are written to `pod_data/{slug}.json` (one file per pod,
 merged with `pods.yaml` at build time — see `pod_dashboard/config.py`).

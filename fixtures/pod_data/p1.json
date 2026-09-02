@@ -4,5 +4,5 @@
     { "name": "Example Contractor", "upwork_handle": "abc12de", "role": "designer" },
     { "name": "Second Contractor", "upwork_handle": "def45gh", "role": "designer" }
   ],
-  "ignored_codes": ["SF42608241100TEST"]
+  "ignore_codes_before": "2026-08-10"
 }

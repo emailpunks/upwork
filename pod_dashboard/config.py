@@ -58,7 +58,7 @@ class Pod:
     brands: list  # Brand
     contractors: list  # Contractor
     roles: dict  # role name -> Role
-    ignored_codes: set = field(default_factory=set)  # Notion codes excluded from the master list entirely
+    ignore_codes_before: str = ""  # ISO date ("YYYY-MM-DD"); codes created before this are dropped entirely
 
 
 @dataclass
@@ -171,7 +171,7 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
         overlay_brands = [b for b in overlay.get("brands", []) if b.get("name") not in existing_brand_names]
         brands = [_build_brand(b) for b in entry.get("brands", []) + overlay_brands]
 
-        ignored_codes = set(entry.get("ignored_codes", [])) | set(overlay.get("ignored_codes", []))
+        ignore_codes_before = overlay.get("ignore_codes_before") or entry.get("ignore_codes_before", "")
 
         pods.append(
             Pod(
@@ -180,7 +180,7 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
                 brands=brands,
                 contractors=contractors,
                 roles=roles,
-                ignored_codes=ignored_codes,
+                ignore_codes_before=ignore_codes_before,
             )
         )
 
@@ -197,7 +197,6 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
                 continue
             contractors = _build_contractors(overlay.get("contractors", []), roles, slug)
             brands = [_build_brand(b) for b in overlay.get("brands", [])]
-            ignored_codes = set(overlay.get("ignored_codes", []))
             pods.append(
                 Pod(
                     slug=slug,
@@ -205,7 +204,7 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
                     brands=brands,
                     contractors=contractors,
                     roles=roles,
-                    ignored_codes=ignored_codes,
+                    ignore_codes_before=overlay.get("ignore_codes_before", ""),
                 )
             )
 
