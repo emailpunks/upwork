@@ -27,9 +27,24 @@
 # pod_data/{slug}.json (see pod_dashboard/config.py) and are merged in on
 # top of whatever's defined here, including for pods that don't have a
 # pods.yaml entry at all yet.
+# TEMPORARY — the old (pre-rename) code scheme, still showing up in real
+# Upwork submissions. Unlike the new scheme, these aren't role-specific
+# (same code = same duration regardless of role). Merged into every role
+# below via the YAML anchor. DELETE this block (and its `<<: *legacy_task_codes`
+# line in each role) once contractors have fully switched to the new codes.
+_legacy_task_codes: &legacy_task_codes
+  TB: { label: "(legacy) TB", minutes: 20 }
+  CT: { label: "(legacy) CT", minutes: 20 }
+  QA: { label: "(legacy) QA", minutes: 20 }
+  TD: { label: "(legacy) TD", minutes: 60 }
+  HC: { label: "(legacy) HC", minutes: 30 }
+  PC: { label: "(legacy) PC", minutes: 30 }
+  SC: { label: "(legacy) SC", minutes: 10 }
+
 roles:
   coordinator:
     task_codes:
+      <<: *legacy_task_codes
       HE: { label: "Ticket Building + Creative QA + Build QA", minutes: 60 }
       PE: { label: "Ticket Building + Build QA", minutes: 40 }
       SM: { label: "Ticket Building + Build QA", minutes: 40 }
@@ -37,16 +52,19 @@ roles:
       DR: { label: "Deliverability Report", minutes: 10 }
   copywriter:
     task_codes:
+      <<: *legacy_task_codes
       HE: { label: "HTML Copywriting", minutes: 60 }
       PE: { label: "Plain-Text Copywriting", minutes: 40 }
       SM: { label: "SMS Copywriting", minutes: 20 }
   designer:
     task_codes:
+      <<: *legacy_task_codes
       HE: { label: "Email Design", minutes: 60 }
       HF: { label: "Footer Design", minutes: 30 }
       SF: { label: "Signup Form Design", minutes: 60 }
   technician:
     task_codes:
+      <<: *legacy_task_codes
       HE: { label: "HTML Build", minutes: 20 }
       PE: { label: "Plain-Text Build", minutes: 20 }
       SM: { label: "SMS Build", minutes: 20 }
