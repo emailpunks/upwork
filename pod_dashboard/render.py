@@ -78,17 +78,18 @@ def render_notion_master_list(notion_codes, used_codes):
   <td>{escape(created_text)}</td>
   <td>{status_html}</td>
   <td class="muted">{escape(detail)}</td>
+  <td><button type="button" class="btn btn-ghost ignore-code-btn" data-code="{escape(code)}">Ignore</button></td>
 </tr>"""
         )
 
-    rows_html = "\n".join(rows) or '<tr><td colspan="4" class="muted">No codes pulled from Notion yet.</td></tr>'
+    rows_html = "\n".join(rows) or '<tr><td colspan="5" class="muted">No codes pulled from Notion yet.</td></tr>'
     claimed_count = sum(1 for code in notion_codes if used_codes.get(code))
 
     return f"""
 <h2>Notion master list</h2>
-<p class="muted">Every code pulled from Notion for this pod, and whether any contractor has claimed it yet ({claimed_count} of {len(notion_codes)} claimed).</p>
+<p class="muted">Every code pulled from Notion for this pod, and whether any contractor has claimed it yet ({claimed_count} of {len(notion_codes)} claimed). "Ignore" excludes a code from this pod entirely — it won't come back on the next report run.</p>
 <table>
-<thead><tr><th>Code</th><th>Date Created</th><th>Status</th><th>Detail</th></tr></thead>
+<thead><tr><th>Code</th><th>Date Created</th><th>Status</th><th>Detail</th><th></th></tr></thead>
 <tbody>
 {rows_html}
 </tbody>

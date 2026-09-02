@@ -25,7 +25,7 @@ def main():
     roles = load_roles()
 
     submissions = parse_timesheet_csv(FIXTURES / "sample_timesheet.csv")
-    notion_records = [
+    all_notion_records = [
         NotionTaskRecord(**row) for row in json.loads((FIXTURES / "notion_task_records.json").read_text())
     ]
 
@@ -41,6 +41,7 @@ def main():
         # this script doesn't mutate the fixture — the ledger's persistence is
         # exercised by main.py's real runs, not this visual-check script.
         used_codes = load_used_codes(pod.slug, used_codes_dir=FIXTURES / "used_codes")
+        notion_records = [r for r in all_notion_records if r.task_code not in pod.ignored_codes]
         reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
         notion_codes = {r.task_code for r in notion_records}
         pod_dir = OUTPUT_DIR / pod.slug

@@ -20,6 +20,11 @@ def run_for_pod(pod, submissions, notion_client):
             records = notion_client.query_task_records(database_id, brand.notion_property_map)
             print(f"[{pod.name}] {brand.name} / {database_id}: pulled {len(records)} Task Code(s) from Notion")
             notion_records.extend(records)
+
+    if pod.ignored_codes:
+        before = len(notion_records)
+        notion_records = [r for r in notion_records if r.task_code not in pod.ignored_codes]
+        print(f"[{pod.name}] Dropped {before - len(notion_records)} ignored code(s)")
     print(f"[{pod.name}] {len(notion_records)} Notion task code(s) total across {len(pod.brands)} brand(s)")
 
     used_codes = load_used_codes(pod.slug)

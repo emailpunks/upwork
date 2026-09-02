@@ -197,6 +197,16 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, 
 <details style="margin-top:8px;">
 <summary>Notion master list ({len(notion_codes or ())} codes)</summary>
 {master_list_html}
+
+<section class="card" style="margin-top:14px;">
+  <h2>Ignore codes</h2>
+  <p class="muted">Paste codes (one per line) to exclude them from this pod entirely — they won't reappear on the next report run. Same effect as clicking "Ignore" on a row above, just faster for a lot at once.</p>
+  <textarea id="ignore-codes-input" rows="4" placeholder="One code per line"></textarea>
+  <div class="row" style="margin-top:10px;">
+    <button id="ignore-codes-btn" class="btn">Ignore Codes</button>
+  </div>
+  <p id="ignore-status" class="muted"></p>
+</section>
 </details>
 """
     script = ADMIN_JS.format(
@@ -665,6 +675,66 @@ ADMIN_JS = """
       status.innerHTML = '<span class="ok">Saved. Takes effect on the next report run — reload the page to see it in the list above.</span>';
     }}).catch(function(err) {{
       status.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
+    }});
+  }});
+
+  // ---- Ignore codes ----
+  function saveIgnoredCodes(codes, statusEl) {{
+    if (!getToken()) {{ statusEl.innerHTML = '<span class="error">Set a GitHub token on the main page first.</span>'; return Promise.resolve(); }}
+    if (codes.length === 0) return Promise.resolve();
+
+    statusEl.textContent = 'Saving...';
+    return ghRequest('GET', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json').then(function(resp) {{
+      if (resp.status === 404) {{
+        return {{ data: {{ name: DEFAULT_POD_SLUG, contractors: [], brands: [], ignored_codes: [] }}, sha: null }};
+      }}
+      if (!resp.ok) return resp.text().then(function(t) {{ throw new Error('GitHub GET failed (' + resp.status + '): ' + t); }});
+      return resp.json().then(function(json) {{
+        var data = JSON.parse(b64DecodeUtf8(json.content.replace(/\\n/g, '')));
+        if (!data.ignored_codes) data.ignored_codes = [];
+        return {{ data: data, sha: json.sha }};
+      }});
+    }}).then(function(current) {{
+      var idSet = {{}};
+      current.data.ignored_codes.concat(codes).forEach(function(c) {{ idSet[c] = true; }});
+      current.data.ignored_codes = Object.keys(idSet);
+      var body = {{
+        message: 'Ignore ' + codes.length + ' code(s) for pod ' + DEFAULT_POD_SLUG,
+        content: b64EncodeUtf8(JSON.stringify(current.data, null, 2)),
+      }};
+      if (current.sha) body.sha = current.sha;
+      return ghRequest('PUT', 'contents/pod_data/' + DEFAULT_POD_SLUG + '.json', body).then(function(resp) {{
+        return resp.json().then(function(json) {{
+          if (!resp.ok) throw new Error(json.message || ('GitHub PUT failed (' + resp.status + ')'));
+        }});
+      }});
+    }}).then(function() {{
+      statusEl.innerHTML = '<span class="ok">Saved. Takes effect on the next report run.</span>';
+    }}).catch(function(err) {{
+      statusEl.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
+    }});
+  }}
+
+  document.getElementById('ignore-codes-btn').addEventListener('click', function() {{
+    var statusEl = document.getElementById('ignore-status');
+    var codes = document.getElementById('ignore-codes-input').value
+      .split('\\n').map(function(s) {{ return s.trim(); }}).filter(function(s) {{ return s.length > 0; }});
+    if (codes.length === 0) {{ statusEl.textContent = 'Paste at least one code first.'; return; }}
+    saveIgnoredCodes(codes, statusEl).then(function() {{
+      document.getElementById('ignore-codes-input').value = '';
+    }});
+  }});
+
+  document.querySelectorAll('.ignore-code-btn').forEach(function(btn) {{
+    btn.addEventListener('click', function() {{
+      var code = btn.getAttribute('data-code');
+      var statusEl = document.getElementById('ignore-status');
+      btn.disabled = true;
+      saveIgnoredCodes([code], statusEl).then(function() {{
+        btn.textContent = 'Ignored';
+      }}).catch(function() {{
+        btn.disabled = false;
+      }});
     }});
   }});
 

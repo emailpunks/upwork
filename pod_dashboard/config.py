@@ -58,6 +58,7 @@ class Pod:
     brands: list  # Brand
     contractors: list  # Contractor
     roles: dict  # role name -> Role
+    ignored_codes: set = field(default_factory=set)  # Notion codes excluded from the master list entirely
 
 
 @dataclass
@@ -170,7 +171,18 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
         overlay_brands = [b for b in overlay.get("brands", []) if b.get("name") not in existing_brand_names]
         brands = [_build_brand(b) for b in entry.get("brands", []) + overlay_brands]
 
-        pods.append(Pod(slug=slug, name=entry.get("name", slug), brands=brands, contractors=contractors, roles=roles))
+        ignored_codes = set(entry.get("ignored_codes", [])) | set(overlay.get("ignored_codes", []))
+
+        pods.append(
+            Pod(
+                slug=slug,
+                name=entry.get("name", slug),
+                brands=brands,
+                contractors=contractors,
+                roles=roles,
+                ignored_codes=ignored_codes,
+            )
+        )
 
     # Pods created entirely through a pod page (adding a contractor or brand
     # to a pod slug that doesn't exist in pods.yaml yet) live only in
@@ -185,6 +197,16 @@ def load_pods(path=PODS_YAML, pod_data_dir=POD_DATA_DIR):
                 continue
             contractors = _build_contractors(overlay.get("contractors", []), roles, slug)
             brands = [_build_brand(b) for b in overlay.get("brands", [])]
-            pods.append(Pod(slug=slug, name=overlay.get("name", slug), brands=brands, contractors=contractors, roles=roles))
+            ignored_codes = set(overlay.get("ignored_codes", []))
+            pods.append(
+                Pod(
+                    slug=slug,
+                    name=overlay.get("name", slug),
+                    brands=brands,
+                    contractors=contractors,
+                    roles=roles,
+                    ignored_codes=ignored_codes,
+                )
+            )
 
     return pods
