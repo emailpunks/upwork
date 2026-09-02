@@ -21,5 +21,15 @@
       "upwork_handle": "771f3857f4de0699",
       "role": "copywriter"
     }
+  ],
+  "brands": [
+    {
+      "name": "Nail Mart USA",
+      "notion_database_ids": [
+        "4e7caf454d7d820b866e014329586682",
+        "079caf454d7d83719de48159a2772dc1",
+        "d50caf454d7d83ab93e5811a9351e1f2"
+      ]
+    }
   ]
 }
