@@ -17,7 +17,10 @@ def run_for_pod(pod, submissions, notion_client):
     notion_records = []
     for brand in pod.brands:
         for database_id in brand.notion_database_ids:
-            notion_records.extend(notion_client.query_task_records(database_id, brand.notion_property_map))
+            records = notion_client.query_task_records(database_id, brand.notion_property_map)
+            print(f"[{pod.name}] {brand.name} / {database_id}: pulled {len(records)} Task Code(s) from Notion")
+            notion_records.extend(records)
+    print(f"[{pod.name}] {len(notion_records)} Notion task code(s) total across {len(pod.brands)} brand(s)")
 
     used_codes = load_used_codes(pod.slug)
     reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
