@@ -6,13 +6,15 @@ from dataclasses import dataclass, field
 # column: "Jane Doe (abc12de)".
 HANDLE_RE = re.compile(r"\(([^)]+)\)\s*$")
 
-# Each stamp in the Memo field looks like "CT11626081516482608231519" — a
-# two-letter task code followed by digits. The full stamp (not just the
-# prefix) is kept, since it's checked for an exact match against the full
-# code Notion generated for that task — see reconcile.py. Stamps can be
-# separated by newlines OR spaces within the same memo, so this searches
-# the whole memo text rather than splitting into lines first.
-STAMP_RE = re.compile(r"[A-Za-z]{2}\d+")
+# Each stamp in the Memo field looks like "CT11626081516482608231519"
+# (legacy scheme) or "HE12608171600VENB" (current scheme — Notion's
+# formula appends a trailing brand-abbreviation suffix after the digits,
+# see render.py's _created_date). The full stamp is kept, since it's
+# checked for an exact match against the full code Notion generated for
+# that task — see reconcile.py. Stamps can be separated by newlines OR
+# spaces within the same memo, so this searches the whole memo text rather
+# than splitting into lines first.
+STAMP_RE = re.compile(r"[A-Za-z]{2}\d+[A-Za-z]*")
 
 
 @dataclass
