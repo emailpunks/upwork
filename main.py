@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pod_dashboard.config import PodConfigError, load_pods, load_roles, load_secrets
 from pod_dashboard.notion_client import NotionClient
-from pod_dashboard.page import render_page
+from pod_dashboard.page import render_index_page, render_pod_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles as find_unknown_handles
 from pod_dashboard.upwork_csv import parse_timesheet_csv
 
@@ -27,6 +27,7 @@ def main():
 
     try:
         all_pods = load_pods()
+        roles = load_roles()
         secrets = load_secrets()
     except PodConfigError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -44,13 +45,18 @@ def main():
     if unknown:
         print(f"Warning: unrecognized Upwork handle(s) in CSV: {', '.join(unknown)}", file=sys.stderr)
 
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    (OUTPUT_DIR / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
+    (OUTPUT_DIR / "index.html").write_text(render_index_page(all_pods))
+
     succeeded, failed = [], []
-    pods_with_reconciliation = []
     for pod in pods:
         print(f"[{pod.name}] Fetching Notion data and reconciling...")
         try:
             reconciliation = run_for_pod(pod, submissions, notion_client)
-            pods_with_reconciliation.append((pod, reconciliation))
+            pod_dir = OUTPUT_DIR / pod.slug
+            pod_dir.mkdir(parents=True, exist_ok=True)
+            (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation, all_pods, roles, unknown))
             hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
             code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
             print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code-count mismatches")
@@ -58,10 +64,6 @@ def main():
         except Exception as e:
             print(f"[{pod.name}] FAILED: {e}", file=sys.stderr)
             failed.append(pod.name)
-
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    (OUTPUT_DIR / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
-    (OUTPUT_DIR / "index.html").write_text(render_page(pods_with_reconciliation, unknown, all_pods, load_roles()))
 
     print(f"\n{len(succeeded)} succeeded, {len(failed)} failed.")
     if failed:

@@ -13,10 +13,11 @@ min). Two independent checks run per pod:
    task actually completed?
 
 Static-site pipeline: `main.py` parses an exported Upwork timesheet CSV,
-pulls from Notion, reconciles, and writes a single `output/index.html`
-(every pod's results plus the config tools below, all behind one password
-gate — see "The page" below), deployed to Netlify via GitHub Actions (same
-shape as the `weekly-reports`/`monthly-reports` dashboards otherwise).
+pulls from Notion, reconciles, and writes a landing page
+(`output/index.html`) plus one page per pod (`output/<slug>/index.html`),
+every page behind its own password gate — see "The pages" below — deployed
+to Netlify via GitHub Actions (same shape as the
+`weekly-reports`/`monthly-reports` dashboards otherwise).
 
 ## Why CSV, not the Upwork API
 
@@ -59,7 +60,7 @@ GitHub Actions secret.
 Roles and task codes are already filled in (shared across every pod — see
 the top of the file). Pods are named P1, P2, etc.; brands (which Notion
 database each pod's tasks live in) need to be added by hand once known.
-**Contractors don't** — see "The page" below. Note
+**Contractors don't** — see "The pages" below. Note
 `contractors[].upwork_handle` — that's the short handle Upwork shows in
 parentheses after a contractor's name (e.g. `Jane Doe (abc12de)`), not
 their display name.
@@ -92,31 +93,34 @@ python3 scripts/demo.py    # writes output/ from fixtures/
 The `Pod reconciliation report` workflow (Actions tab → "Run workflow")
 takes the full CSV contents pasted into a text box, so a routine run
 doesn't need a local checkout — export the CSV, open it in a text editor,
-paste the contents in, run. Once the site's live, "The page" below does
+paste the contents in, run. Once the site's live, "The pages" below does
 this same thing (drag-and-drop, not paste) without needing the Actions
 tab at all — the GitHub Actions route only matters for the very first
-deploy, before the page exists yet.
+deploy, before any page exists yet.
 
-## The page
+## The pages
 
-There's one page (`pod_dashboard/page.py`), behind one password gate —
-no separate public dashboard and no separate hidden admin URL. After the
-password, it shows every pod's reconciliation results, then further down:
+Every page (`pod_dashboard/page.py`) is behind the same password gate —
+no separate public dashboard and no separate hidden admin URL. Entering
+the password on any page unlocks every other page too (remembered in the
+browser), so it's only asked once per browser.
 
-- **Drop a timesheet CSV to see unassigned handles.** Any Upwork handle in
-  it that isn't yet assigned to a contractor in any pod shows up with a
-  Pod + Role picker — pick both and save, no YAML editing. New pods can be
-  created inline (type a name like "P2", click "Add to pod list") — a pod
-  created this way has no brands until those are added to `pods.yaml` by
-  hand.
-- **Run the report** with that same CSV, rebuilding the whole page — same
-  trigger as the GitHub Actions "Run workflow" button, without leaving the
-  page.
+- **Landing page** (`/`): lists every pod, and holds the GitHub personal
+  access token — entered once here, kept in the browser's local storage,
+  shared across every pod page on the site since it's the same origin.
+- **Each pod's own page** (`/<slug>/`): drop a timesheet CSV to see
+  handles in it that aren't assigned to a contractor in any pod yet —
+  each shows a Pod + Role picker (defaulting to the current pod), pick
+  both and save, no YAML editing. New pods can be created inline (type a
+  name like "P2", click "Add to pod list") — a pod created this way has no
+  brands until those are added to `pods.yaml` by hand. Below that, a Run
+  Report button re-runs the whole pipeline with that CSV and rebuilds
+  every pod's page — same trigger as the GitHub Actions "Run workflow"
+  button, without leaving the page. Then that pod's own reconciliation
+  tables.
 
 Assignments are written to `pod_data/{slug}.json` (one file per pod,
 merged with `pods.yaml` at build time — see `pod_dashboard/config.py`).
 The password is the same one as Weekly/Monthly's Admin pages (not real
-security, just a speed bump), plus a GitHub personal access token you
-generate yourself and keep only in your browser's local storage, scoped to
-this repo's Contents + Actions APIs. See the page itself for how to
-generate one.
+security, just a speed bump). See the landing page for how to generate the
+GitHub token.

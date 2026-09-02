@@ -1,8 +1,8 @@
 from html import escape
 
-# CSS for the dashboard content — merged into page.py's full-page CSS
-# alongside the admin tools' styles, since this all lives on one page now.
-DASHBOARD_CSS = """
+# CSS for reconciliation tables — merged into page.py's shared CSS, used on
+# every pod's own page.
+TABLE_CSS = """
 h2 { font-size: 16px; margin: 32px 0 4px; }
 table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
@@ -10,8 +10,6 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 11.5px; text-tra
 .status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
 .status.ok { background: rgba(12,163,12,0.15); color: var(--good); }
 .status.bad { background: rgba(230,103,103,0.15); color: var(--bad); }
-.pod-section { margin-bottom: 36px; }
-.pod-section h2.pod-title { font-size: 18px; margin: 0 0 4px; }
 """
 
 
@@ -21,7 +19,9 @@ def _status_span(status):
     return f'<span class="status {cls}">{label}</span>'
 
 
-def _pod_section(pod, reconciliation):
+def render_pod_tables(reconciliation):
+    """Returns an HTML fragment (no page shell) with this one pod's two
+    reconciliation tables, for embedding on that pod's own page."""
     hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
     code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
 
@@ -51,48 +51,23 @@ def _pod_section(pod, reconciliation):
     ) or '<tr><td colspan="7" class="muted">No submissions yet.</td></tr>'
 
     return f"""
-<div class="pod-section">
-  <h2 class="pod-title">{escape(pod.name)}</h2>
-  <p class="muted">{hours_mismatches} hours mismatch(es), {code_mismatches} code-count mismatch(es).</p>
+<p class="muted">{hours_mismatches} hours mismatch(es), {code_mismatches} code-count mismatch(es).</p>
 
-  <h2>Submitted time vs. code stamps</h2>
-  <p class="muted">Does each submission's total time match what its logged codes add up to?</p>
-  <table>
-  <thead><tr><th>Contractor</th><th>Period</th><th>Submitted</th><th>Expected</th><th>Status</th><th>Detail</th></tr></thead>
-  <tbody>
-  {hours_rows}
-  </tbody>
-  </table>
+<h2>Submitted time vs. code stamps</h2>
+<p class="muted">Does each submission's total time match what its logged codes add up to?</p>
+<table>
+<thead><tr><th>Contractor</th><th>Period</th><th>Submitted</th><th>Expected</th><th>Status</th><th>Detail</th></tr></thead>
+<tbody>
+{hours_rows}
+</tbody>
+</table>
 
-  <h2>Upwork codes vs. Notion records</h2>
-  <p class="muted">Does the number of times each code was submitted on Upwork match how many times Notion shows it completed?</p>
-  <table>
-  <thead><tr><th>Contractor</th><th>Period</th><th>Code</th><th>Upwork</th><th>Notion</th><th>Status</th><th>Detail</th></tr></thead>
-  <tbody>
-  {code_rows}
-  </tbody>
-  </table>
-</div>
-"""
-
-
-def render_dashboard_section(pods_with_reconciliation, unknown_handles=None):
-    """pods_with_reconciliation: list of (Pod, PodReconciliation) tuples.
-    Returns an HTML fragment (no <html>/<head>/CSS) meant to be embedded in
-    page.py's single gated page, above the admin tools section."""
-    unknown_warning = ""
-    if unknown_handles:
-        handles = ", ".join(escape(h) for h in unknown_handles)
-        unknown_warning = (
-            f'<div class="warning">Upwork submissions from handle(s) not found in any pod\'s roster '
-            f"(from the last report run): {handles}</div>"
-        )
-
-    sections = "\n".join(_pod_section(pod, reconciliation) for pod, reconciliation in pods_with_reconciliation)
-
-    return f"""
-<h1>Pod Reconciliation</h1>
-<p class="muted">Upwork time submissions checked against Notion task records, by pod.</p>
-{unknown_warning}
-{sections}
+<h2>Upwork codes vs. Notion records</h2>
+<p class="muted">Does the number of times each code was submitted on Upwork match how many times Notion shows it completed?</p>
+<table>
+<thead><tr><th>Contractor</th><th>Period</th><th>Code</th><th>Upwork</th><th>Notion</th><th>Status</th><th>Detail</th></tr></thead>
+<tbody>
+{code_rows}
+</tbody>
+</table>
 """

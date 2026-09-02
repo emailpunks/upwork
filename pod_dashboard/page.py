@@ -1,27 +1,29 @@
-"""The whole site is one page, behind one password gate: reconciliation
-results for every pod at the top, then the admin tools (assign contractors,
-run a new report) below. There's no separate public dashboard and no
-separate hidden admin URL — everything here needs the password.
+"""Two kinds of page, both password-gated: a landing page (pod navigation +
+the GitHub token, which is shared across pods via localStorage) and one
+page per pod (CSV drop zone, unassigned-handle assignment, Run Report
+button, and that pod's own reconciliation tables).
 
 Deliberately NOT real security: the password gate is a client-side SHA-256
-comparison (trivially bypassable via view-source), and the page's only real
+comparison (trivially bypassable via view-source), and the pages' only real
 protection is (a) Netlify's own site-wide password, and (b) a GitHub token
-scoped to just this one repo's Contents/Actions APIs, entered once and kept
-in the browser's localStorage only — never written to the repo or bundled
-into the deployed source. Same mechanism as the Weekly/Monthly dashboards'
-Admin pages, same password by choice.
+scoped to just this one repo's Contents/Actions APIs, entered once (on the
+landing page) and kept in the browser's localStorage only — shared across
+every pod page on this site since localStorage is per-origin, never written
+to the repo or bundled into the deployed source. Same mechanism as the
+Weekly/Monthly dashboards' Admin pages, same password by choice.
 
-Writes go straight to pod_data/{slug}.json in this repo via the GitHub
-Contents API (GET for the current sha, then PUT the updated JSON) — see
-config.py's _load_pod_overlay()/load_pods() for how the pipeline reads it
-back. Assigning someone to a pod slug that doesn't exist in pods.yaml yet
-creates that pod entirely from pod_data (no brands until those are added
-by hand — this only manages contractor-to-pod-and-role assignment).
+Assignment writes go straight to pod_data/{slug}.json in this repo via the
+GitHub Contents API (GET for the current sha, then PUT the updated JSON) —
+see config.py's _load_pod_overlay()/load_pods() for how the pipeline reads
+it back. Assigning someone to a pod slug that doesn't exist in pods.yaml
+yet creates that pod entirely from pod_data (no brands until those are
+added by hand — this only manages contractor-to-pod-and-role assignment).
 """
 
 import json
+from html import escape
 
-from .render import DASHBOARD_CSS, render_dashboard_section
+from .render import TABLE_CSS, render_pod_tables
 
 GITHUB_OWNER = "emailpunks"
 GITHUB_REPO = "upwork"
@@ -29,27 +31,17 @@ REPORT_WORKFLOW = "pod-report.yml"
 
 # SHA-256 hex digest of the page password. Same password as the
 # Weekly/Monthly dashboards' Admin pages, by choice — see those repos'
-# page.py for how to change it (same mechanism, not real security
+# admin_page.py for how to change it (same mechanism, not real security
 # either way).
 PASSWORD_SHA256 = "08fcf9917fe0f61ff5cab6e52d8bf058119f3497d9c21c856911d403a29084d9"
 
 
-def render_page(pods_with_reconciliation, unknown_handles, all_pods, roles):
-    """pods_with_reconciliation: list of (Pod, PodReconciliation) for the
-    dashboard section. all_pods/roles: every known pod and role, for the
-    admin tools' pod/role pickers (a pod can exist with no reconciliation
-    yet if it has no contractors)."""
-    dashboard_html = render_dashboard_section(pods_with_reconciliation, unknown_handles)
-
-    pods_json = json.dumps([{"slug": p.slug, "name": p.name} for p in all_pods])
-    handles_json = json.dumps(sorted({c.upwork_handle for p in all_pods for c in p.contractors}))
-    roles_json = json.dumps(sorted(roles.keys()))
-
+def _page_shell(title, app_body, script):
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Pod Reconciliation</title>
+<title>{title}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
 <style>{CSS}</style>
@@ -57,7 +49,7 @@ def render_page(pods_with_reconciliation, unknown_handles, all_pods, roles):
 <body>
 
 <div id="gate" class="wrap gate">
-  <h1>Pod Reconciliation</h1>
+  <h1>{title}</h1>
   <p class="muted">Internal use only.</p>
   <input type="password" id="gate-password" placeholder="Password" autocomplete="off" />
   <button id="gate-submit" class="btn btn-primary">Enter</button>
@@ -65,89 +57,129 @@ def render_page(pods_with_reconciliation, unknown_handles, all_pods, roles):
 </div>
 
 <div id="app" class="wrap" style="display:none">
-
-{dashboard_html}
-
-<h1 style="margin-top:48px;">Config</h1>
-<p class="muted">Assign new contractors to a pod/role, and run a fresh report.</p>
-
-  <section class="card">
-    <h2>GitHub access</h2>
-    <p class="muted">A token is required to save changes — entered once, kept only in this browser (never sent anywhere but GitHub, never written to the repo).</p>
-    <details id="token-help">
-      <summary>How do I get a token?</summary>
-      <ol>
-        <li>Go to <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">github.com/settings/tokens/new</a> (classic token)</li>
-        <li>Give it a note (e.g. "pod dashboard") and an expiration</li>
-        <li>Under <strong>Select scopes</strong>, check <strong>repo</strong> (Full control of private repositories) and <strong>workflow</strong> — covers both saving assignments and the Run Report button below</li>
-        <li>Generate the token and paste it below</li>
-      </ol>
-    </details>
-    <div class="row">
-      <input type="password" id="gh-token" placeholder="ghp_..." autocomplete="off" />
-      <button id="gh-token-save" class="btn">Save token</button>
-      <button id="gh-token-clear" class="btn btn-ghost">Clear</button>
-    </div>
-    <p id="gh-token-status" class="muted"></p>
-  </section>
-
-  <section class="card">
-    <h2>Timesheet CSV</h2>
-    <p class="muted">Drop the CSV exported from Upwork's client timesheet report, or click to choose the file.</p>
-    <div id="drop-zone" class="drop-zone">
-      <span id="drop-zone-text">Drop CSV here, or click to choose a file</span>
-      <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none" />
-    </div>
-    <details style="margin-top:10px;">
-      <summary>Paste text instead</summary>
-      <textarea id="csv-input" rows="8" placeholder='"Date from","Date to","Talent","Hours","Memo"&#10;...' style="margin-top:8px;"></textarea>
-    </details>
-    <div class="row" style="margin-top:10px;">
-      <button id="parse-btn" class="btn btn-primary">Parse CSV</button>
-    </div>
-    <p id="parse-status" class="muted"></p>
-  </section>
-
-  <section class="card" id="unassigned-card" style="display:none">
-    <h2>Unassigned handles</h2>
-    <p class="muted">Found in the CSV but not assigned to any pod yet. Pick a pod and role for each, then save.</p>
-    <div class="row" style="margin-bottom: 10px;">
-      <label style="width:auto;">New pod name</label>
-      <input type="text" id="new-pod-name" placeholder="e.g. P2" style="max-width:160px;" />
-      <button id="add-pod-btn" class="btn btn-ghost" type="button">Add to pod list</button>
-    </div>
-    <table id="unassigned-table">
-      <thead><tr><th>Name</th><th>Handle</th><th>Pod</th><th>Role</th></tr></thead>
-      <tbody id="unassigned-body"></tbody>
-    </table>
-    <div class="row" style="margin-top:14px;">
-      <button id="save-assignments-btn" class="btn btn-primary">Save Assignments</button>
-    </div>
-    <p id="save-status" class="muted"></p>
-  </section>
-
-  <section class="card">
-    <h2>Run Report</h2>
-    <p class="muted">Runs the reconciliation pipeline with the CSV above and rebuilds this page. Takes a few minutes.</p>
-    <button id="run-report-btn" class="btn">Run Report</button>
-    <p id="run-status" class="muted" style="margin-top:8px;"></p>
-  </section>
-
+{app_body}
 </div>
 
 <script>
-{JS.format(
-    admin_owner=GITHUB_OWNER,
-    admin_repo=GITHUB_REPO,
-    password_hash=PASSWORD_SHA256,
-    pods_json=pods_json,
-    handles_json=handles_json,
-    roles_json=roles_json,
-    report_workflow=REPORT_WORKFLOW,
-)}
+{GATE_JS.format(password_hash=PASSWORD_SHA256)}
+{script}
 </script>
 </body>
 </html>"""
+
+
+def render_index_page(all_pods):
+    """Landing page: GitHub token (shared across every pod page via
+    localStorage) + links to each pod's own page."""
+    pod_links = "\n".join(
+        f'<a href="{escape(p.slug)}/">{escape(p.name)}</a>' for p in all_pods
+    ) or '<p class="muted">No pods yet.</p>'
+
+    app_body = f"""
+<h1>Pod Reconciliation</h1>
+<p class="muted">Upwork time submissions checked against Notion task records, by pod.</p>
+
+<section class="card">
+  <h2>GitHub access</h2>
+  <p class="muted">A token is required to save contractor assignments or run a new report from a pod's page — entered once here, kept only in this browser (never sent anywhere but GitHub, never written to the repo), shared across every pod page on this site.</p>
+  <details id="token-help">
+    <summary>How do I get a token?</summary>
+    <ol>
+      <li>Go to <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">github.com/settings/tokens/new</a> (classic token)</li>
+      <li>Give it a note (e.g. "pod dashboard") and an expiration</li>
+      <li>Under <strong>Select scopes</strong>, check <strong>repo</strong> (Full control of private repositories) and <strong>workflow</strong> — covers both saving assignments and the Run Report button on each pod's page</li>
+      <li>Generate the token and paste it below</li>
+    </ol>
+  </details>
+  <div class="row">
+    <input type="password" id="gh-token" placeholder="ghp_..." autocomplete="off" />
+    <button id="gh-token-save" class="btn">Save token</button>
+    <button id="gh-token-clear" class="btn btn-ghost">Clear</button>
+  </div>
+  <p id="gh-token-status" class="muted"></p>
+</section>
+
+<div class="card pod-list">
+{pod_links}
+</div>
+"""
+    return _page_shell("Pod Reconciliation", app_body, TOKEN_JS)
+
+
+def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None):
+    tables_html = render_pod_tables(reconciliation)
+
+    unknown_warning = ""
+    if unknown_handles:
+        handles = ", ".join(escape(h) for h in unknown_handles)
+        unknown_warning = (
+            f'<div class="warning">Upwork submissions from handle(s) not found in any pod\'s roster '
+            f"(from the last report run): {handles}</div>"
+        )
+
+    pods_json = json.dumps([{"slug": p.slug, "name": p.name} for p in all_pods])
+    handles_json = json.dumps(sorted({c.upwork_handle for p in all_pods for c in p.contractors}))
+    roles_json = json.dumps(sorted(roles.keys()))
+
+    app_body = f"""
+<p class="muted"><a href="../">&larr; All pods</a></p>
+<h1>{escape(pod.name)}</h1>
+{unknown_warning}
+
+<section class="card">
+  <h2>Timesheet CSV</h2>
+  <p class="muted">Drop the CSV exported from Upwork's client timesheet report, or click to choose the file.</p>
+  <div id="drop-zone" class="drop-zone">
+    <span id="drop-zone-text">Drop CSV here, or click to choose a file</span>
+    <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none" />
+  </div>
+  <details style="margin-top:10px;">
+    <summary>Paste text instead</summary>
+    <textarea id="csv-input" rows="8" placeholder='"Date from","Date to","Talent","Hours","Memo"&#10;...' style="margin-top:8px;"></textarea>
+  </details>
+  <div class="row" style="margin-top:10px;">
+    <button id="parse-btn" class="btn btn-primary">Parse CSV</button>
+  </div>
+  <p id="parse-status" class="muted"></p>
+</section>
+
+<section class="card" id="unassigned-card" style="display:none">
+  <h2>Unassigned handles</h2>
+  <p class="muted">Found in the CSV but not assigned to any pod yet. Pick a pod and role for each, then save.</p>
+  <div class="row" style="margin-bottom: 10px;">
+    <label style="width:auto;">New pod name</label>
+    <input type="text" id="new-pod-name" placeholder="e.g. P2" style="max-width:160px;" />
+    <button id="add-pod-btn" class="btn btn-ghost" type="button">Add to pod list</button>
+  </div>
+  <table id="unassigned-table">
+    <thead><tr><th>Name</th><th>Handle</th><th>Pod</th><th>Role</th></tr></thead>
+    <tbody id="unassigned-body"></tbody>
+  </table>
+  <div class="row" style="margin-top:14px;">
+    <button id="save-assignments-btn" class="btn btn-primary">Save Assignments</button>
+  </div>
+  <p id="save-status" class="muted"></p>
+</section>
+
+<section class="card">
+  <h2>Run Report</h2>
+  <p class="muted">Runs the reconciliation pipeline with the CSV above and rebuilds every pod's page. Takes a few minutes.</p>
+  <button id="run-report-btn" class="btn">Run Report</button>
+  <p id="run-status" class="muted" style="margin-top:8px;"></p>
+</section>
+
+{tables_html}
+"""
+    script = ADMIN_JS.format(
+        admin_owner=GITHUB_OWNER,
+        admin_repo=GITHUB_REPO,
+        pods_json=pods_json,
+        handles_json=handles_json,
+        roles_json=roles_json,
+        report_workflow=REPORT_WORKFLOW,
+        default_pod_slug=pod.slug,
+    )
+    return _page_shell(escape(pod.name), app_body, script)
 
 
 CSS = (
@@ -187,6 +219,8 @@ a { color: var(--accent); }
   padding: 18px 20px;
   margin-bottom: 20px;
 }
+.pod-list a { display: block; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.pod-list a:last-child { border-bottom: none; }
 input[type="text"], input[type="password"], select, textarea {
   border: 1px solid var(--border);
   background: var(--page);
@@ -231,18 +265,15 @@ td select { min-width: 130px; }
 .drop-zone.drag-over { border-color: var(--accent); color: var(--text-primary); background: rgba(249,188,60,0.06); }
 .warning { background: rgba(249,188,60,0.12); border: 1px solid rgba(249,188,60,0.3); border-radius: 8px; padding: 10px 14px; font-size: 12.5px; color: var(--warn); margin: 16px 0; }
 """
-    + DASHBOARD_CSS
+    + TABLE_CSS
 )
 
 
-JS = """
-  var OWNER = "{admin_owner}";
-  var REPO = "{admin_repo}";
+# Password gate + "remembered unlock" (localStorage flag) so navigating
+# between the landing page and pod pages doesn't re-prompt every time.
+# Shared by both page templates.
+GATE_JS = """
   var PASSWORD_HASH = "{password_hash}";
-  var PODS = {pods_json};
-  var KNOWN_HANDLES = {handles_json};
-  var ROLE_NAMES = {roles_json};
-  var REPORT_WORKFLOW = "{report_workflow}";
 
   function sha256Hex(text) {{
     var data = new TextEncoder().encode(text);
@@ -253,6 +284,13 @@ JS = """
     }});
   }}
 
+  function unlock() {{
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = '';
+  }}
+
+  if (localStorage.getItem('pod_dashboard_unlocked') === '1') {{ unlock(); }}
+
   document.getElementById('gate-submit').addEventListener('click', checkPassword);
   document.getElementById('gate-password').addEventListener('keydown', function(e) {{
     if (e.key === 'Enter') checkPassword();
@@ -262,13 +300,51 @@ JS = """
     var val = document.getElementById('gate-password').value;
     sha256Hex(val).then(function(hash) {{
       if (hash === PASSWORD_HASH) {{
-        document.getElementById('gate').style.display = 'none';
-        document.getElementById('app').style.display = '';
+        localStorage.setItem('pod_dashboard_unlocked', '1');
+        unlock();
       }} else {{
         document.getElementById('gate-error').style.display = '';
       }}
     }});
   }}
+
+  function getToken() {{ return localStorage.getItem('admin_gh_token') || ''; }}
+"""
+
+
+# Landing-page-only: the token input's save/clear/status UI. Reading the
+# token (getToken) is defined in GATE_JS since pod pages need it too.
+TOKEN_JS = """
+  var tokenInput = document.getElementById('gh-token');
+  var tokenStatus = document.getElementById('gh-token-status');
+  function refreshTokenStatus() {
+    tokenStatus.textContent = getToken() ? 'Token saved in this browser.' : 'No token saved yet.';
+  }
+  refreshTokenStatus();
+
+  document.getElementById('gh-token-save').addEventListener('click', function() {
+    if (tokenInput.value.trim()) {
+      localStorage.setItem('admin_gh_token', tokenInput.value.trim());
+      tokenInput.value = '';
+      refreshTokenStatus();
+    }
+  });
+  document.getElementById('gh-token-clear').addEventListener('click', function() {
+    localStorage.removeItem('admin_gh_token');
+    refreshTokenStatus();
+  });
+"""
+
+
+# Pod-page-only: CSV drop/parse, unassigned-handle assignment, Run Report.
+ADMIN_JS = """
+  var OWNER = "{admin_owner}";
+  var REPO = "{admin_repo}";
+  var PODS = {pods_json};
+  var KNOWN_HANDLES = {handles_json};
+  var ROLE_NAMES = {roles_json};
+  var REPORT_WORKFLOW = "{report_workflow}";
+  var DEFAULT_POD_SLUG = "{default_pod_slug}";
 
   function b64EncodeUtf8(str) {{
     return btoa(unescape(encodeURIComponent(str)));
@@ -276,27 +352,6 @@ JS = """
   function b64DecodeUtf8(b64) {{
     return decodeURIComponent(escape(atob(b64)));
   }}
-
-  function getToken() {{ return localStorage.getItem('admin_gh_token') || ''; }}
-
-  var tokenInput = document.getElementById('gh-token');
-  var tokenStatus = document.getElementById('gh-token-status');
-  function refreshTokenStatus() {{
-    tokenStatus.textContent = getToken() ? 'Token saved in this browser.' : 'No token saved yet.';
-  }}
-  refreshTokenStatus();
-
-  document.getElementById('gh-token-save').addEventListener('click', function() {{
-    if (tokenInput.value.trim()) {{
-      localStorage.setItem('admin_gh_token', tokenInput.value.trim());
-      tokenInput.value = '';
-      refreshTokenStatus();
-    }}
-  }});
-  document.getElementById('gh-token-clear').addEventListener('click', function() {{
-    localStorage.removeItem('admin_gh_token');
-    refreshTokenStatus();
-  }});
 
   function ghRequest(method, path, body) {{
     var headers = {{
@@ -417,7 +472,8 @@ JS = """
 
   function podOptionsHtml() {{
     return PODS.map(function(p) {{
-      return '<option value="' + p.slug + '">' + p.name + '</option>';
+      var selected = p.slug === DEFAULT_POD_SLUG ? ' selected' : '';
+      return '<option value="' + p.slug + '"' + selected + '>' + p.name + '</option>';
     }}).join('');
   }}
   function roleOptionsHtml() {{
@@ -465,10 +521,9 @@ JS = """
 
   document.getElementById('save-assignments-btn').addEventListener('click', function() {{
     var status = document.getElementById('save-status');
-    if (!getToken()) {{ status.innerHTML = '<span class="error">Save a GitHub token above first.</span>'; return; }}
+    if (!getToken()) {{ status.innerHTML = '<span class="error">Set a GitHub token on the main page first.</span>'; return; }}
 
     var podSelects = document.querySelectorAll('.pod-select');
-    var roleSelects = document.querySelectorAll('.role-select');
     var byPod = {{}}; // slug -> [{{name, upwork_handle, role}}]
     var assignedIdx = [];
 
@@ -513,7 +568,7 @@ JS = """
           }}
         }});
         var body = {{
-          message: 'Assign contractor(s) to pod ' + slug + ' via Admin page',
+          message: 'Assign contractor(s) to pod ' + slug + ' via the pod page',
           content: b64EncodeUtf8(JSON.stringify(current.data, null, 2)),
         }};
         if (current.sha) body.sha = current.sha;
@@ -604,7 +659,7 @@ JS = """
     var btn = this;
     var statusEl = document.getElementById('run-status');
     btn.disabled = true;
-    if (!getToken()) {{ statusEl.textContent = 'Save a GitHub token above first.'; btn.disabled = false; return; }}
+    if (!getToken()) {{ statusEl.textContent = 'Set a GitHub token on the main page first.'; btn.disabled = false; return; }}
     var csv = document.getElementById('csv-input').value;
     if (!csv.trim()) {{ statusEl.textContent = 'Drop or paste a CSV above first.'; btn.disabled = false; return; }}
 
@@ -615,7 +670,7 @@ JS = """
         setTimeout(pollRunStatus, 15000);
         return;
       }}
-      if (!confirm('Run the reconciliation report now with this CSV? Rebuilds this whole page.')) {{
+      if (!confirm('Run the reconciliation report now with this CSV? Rebuilds every pod\\'s page.')) {{
         statusEl.textContent = '';
         btn.disabled = false;
         return;
