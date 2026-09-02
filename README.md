@@ -7,10 +7,16 @@ min). Two independent checks run per pod:
 
 1. **Submitted time vs. code stamps** — does the total time a contractor
    submitted on Upwork match what their logged codes add up to (using each
-   code's fixed duration)?
-2. **Upwork codes vs. Notion records** — does the number of times each code
-   was submitted on Upwork match how many times Notion shows that code's
-   task actually completed?
+   code's two-letter prefix and its fixed duration)?
+2. **Upwork codes vs. Notion master list** — does each *full* code a
+   contractor submitted exactly match one Notion generated for them (the
+   "master list", pulled fresh from Notion every run), and hasn't already
+   been claimed in a previous run? Notion is read-only here — nothing is
+   ever written back to it. Instead, every code confirmed as a genuine,
+   first-time match gets recorded in `used_codes/{pod-slug}.json` (see
+   `pod_dashboard/ledger.py`), committed back to this repo by the GitHub
+   Actions workflow after each run, so the same code can never be
+   re-claimed later.
 
 Static-site pipeline: `main.py` parses an exported Upwork timesheet CSV,
 pulls from Notion, reconciles, and writes a landing page
@@ -35,9 +41,10 @@ rendering) — see the git history for the GraphQL version this replaced.
 Each CSV row is one contractor's submission for a week: `Date from`,
 `Date to`, `Talent` (`"Name (upwork_handle)"`), `Hours`, and `Memo` — a
 list of task stamps like `CT11626081516482608231519`, separated by
-newlines or spaces. **Only the first two letters of each stamp matter** —
-everything after that (task ID, timestamps) is internal to how Notion
-generates the stamp and isn't parsed. See `pod_dashboard/upwork_csv.py`.
+newlines or spaces. The **whole stamp** is kept (not just the two-letter
+prefix): the prefix alone drives the hours check (its fixed duration from
+`pods.yaml`), but the full stamp is what gets checked for an exact match
+against Notion's master list. See `pod_dashboard/upwork_csv.py`.
 
 ## Setup
 
@@ -48,6 +55,10 @@ generates the stamp and isn't parsed. See `pod_dashboard/upwork_csv.py`.
 2. For each Notion database referenced in `pods.yaml`, open it, click
    "..." → **Connections**, and add this integration. Without this step the
    API can't see the database at all, even with a valid token.
+3. That database's "Task Code" property (whatever it's called — see
+   `notion_property_map` in `pods.yaml`) needs to hold the **full**
+   generated code (e.g. `TB11426081516482608251636`), not just the
+   two-letter prefix — that's what gets checked against Upwork.
 
 ### 2. Fill in secrets
 

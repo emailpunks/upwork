@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 HANDLE_RE = re.compile(r"\(([^)]+)\)\s*$")
 
 # Each stamp in the Memo field looks like "CT11626081516482608231519" — a
-# two-letter task code followed by digits whose exact structure isn't our
-# concern (task ID, timestamps, whatever Notion embedded — it can change).
-# All that matters is the two-letter prefix. Stamps can be separated by
-# newlines OR spaces within the same memo, so this searches the whole memo
-# text rather than splitting into lines first.
+# two-letter task code followed by digits. The full stamp (not just the
+# prefix) is kept, since it's checked for an exact match against the full
+# code Notion generated for that task — see reconcile.py. Stamps can be
+# separated by newlines OR spaces within the same memo, so this searches
+# the whole memo text rather than splitting into lines first.
 STAMP_RE = re.compile(r"[A-Za-z]{2}\d+")
 
 
@@ -21,7 +21,7 @@ class UpworkSubmission:
     date_from: str
     date_to: str
     hours: float
-    codes: list = field(default_factory=list)  # one entry per stamp, e.g. ["ES", "ES", "QA"]
+    codes: list = field(default_factory=list)  # one entry per stamp, full string, e.g. ["ES12326081517442608251636"]
     unrecognized_text: list = field(default_factory=list)  # memo content that wasn't a code stamp
 
 
@@ -31,7 +31,7 @@ def _extract_handle(talent):
 
 
 def _parse_memo(memo):
-    codes = [m.group(0)[:2].upper() for m in STAMP_RE.finditer(memo)]
+    codes = [m.group(0) for m in STAMP_RE.finditer(memo)]
     # Whatever's left after removing every matched stamp is free text the
     # contractor typed instead of (or alongside) a code stamp — worth
     # surfacing, since it's real logged time with no code to check it against.

@@ -10,6 +10,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from pod_dashboard.config import load_pods, load_roles
+from pod_dashboard.ledger import load_used_codes
 from pod_dashboard.notion_client import NotionTaskRecord
 from pod_dashboard.page import render_index_page, render_pod_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles
@@ -36,13 +37,17 @@ def main():
     (OUTPUT_DIR / "index.html").write_text(render_index_page(pods))
 
     for pod in pods:
-        reconciliation = reconcile_pod(pod, submissions, notion_records)
+        # Loaded from fixtures/used_codes/ but never written back, so re-running
+        # this script doesn't mutate the fixture — the ledger's persistence is
+        # exercised by main.py's real runs, not this visual-check script.
+        used_codes = load_used_codes(pod.slug, used_codes_dir=FIXTURES / "used_codes")
+        reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
         pod_dir = OUTPUT_DIR / pod.slug
         pod_dir.mkdir(parents=True, exist_ok=True)
         (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation, pods, roles, unknown))
         hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
         code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
-        print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code-count mismatches -> {pod_dir / 'index.html'}")
+        print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code mismatches -> {pod_dir / 'index.html'}")
 
 
 if __name__ == "__main__":

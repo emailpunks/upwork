@@ -24,17 +24,16 @@ class HoursCheck:
 
 
 @dataclass
-class CodeCountCheck:
-    """One (contractor, period, code) combination: did they log this code on
-    Upwork the same number of times Notion shows it was actually completed?"""
+class CodeCheck:
+    """One code stamp the contractor submitted on Upwork: does it exactly
+    match a code Notion generated for them, and hasn't already been
+    claimed in a previous (or this) run?"""
 
     contractor: str
     date_from: str
     date_to: str
-    code: str
-    label: str  # task_codes' descriptive label for this code, per the contractor's role; "" if unrecognized
-    upwork_count: int
-    notion_count: int
+    code: str  # full code as submitted, e.g. "TB11426081516482608251636"
+    label: str  # task_codes' label for its two-letter prefix; "" if unrecognized
     status: str  # match | mismatch
     detail: str
 
@@ -45,14 +44,10 @@ class PodReconciliation:
     code_checks: list = field(default_factory=list)
 
 
-def _date_in_range(date, date_from, date_to):
-    return date_from <= date <= date_to
-
-
 def _check_hours(contractor, role, submission):
-    counts = Counter(submission.codes)
-    unrecognized_codes = sorted(c for c in counts if c not in role.task_codes)
-    expected_minutes = sum(counts[c] * role.task_codes[c].minutes for c in counts if c in role.task_codes)
+    prefixes = Counter(code[:2].upper() for code in submission.codes)
+    unrecognized_codes = sorted(p for p in prefixes if p not in role.task_codes)
+    expected_minutes = sum(n * role.task_codes[p].minutes for p, n in prefixes.items() if p in role.task_codes)
     submitted_minutes = submission.hours * 60
 
     problems = []
@@ -63,7 +58,7 @@ def _check_hours(contractor, role, submission):
     if abs(expected_minutes - submitted_minutes) > HOURS_TOLERANCE_MINUTES:
         problems.append(f"submitted {submitted_minutes:.0f}m, codes add up to {expected_minutes:.0f}m")
 
-    code_summary = ", ".join(f"{code}x{n}" for code, n in sorted(counts.items()))
+    code_summary = ", ".join(f"{prefix}x{n}" for prefix, n in sorted(prefixes.items()))
     status = "mismatch" if problems else "match"
     detail = "; ".join(problems) if problems else code_summary
 
@@ -78,33 +73,39 @@ def _check_hours(contractor, role, submission):
     )
 
 
-def _check_code_counts(contractor, role, date_from, date_to, upwork_codes, notion_records):
-    upwork_counts = Counter(upwork_codes)
-    notion_counts = Counter(
-        r.task_code
-        for r in notion_records
-        if r.contractor == contractor.name and _date_in_range(r.date, date_from, date_to)
-    )
-
+def _check_codes(contractor, role, date_from, date_to, upwork_codes, notion_codes, used_codes):
+    """notion_codes: the full set of codes Notion has for this contractor
+    (the "master database"). used_codes: the persisted ledger of codes
+    already claimed in a prior run — mutated in place with any newly
+    verified code, so the caller can save it back out."""
     checks = []
-    for code in sorted(set(upwork_counts) | set(notion_counts)):
-        uw, no = upwork_counts.get(code, 0), notion_counts.get(code, 0)
-        if uw == no:
-            status, detail = "match", f"{uw}x on both sides"
-        elif uw > no:
-            status, detail = "mismatch", f"{uw}x submitted on Upwork, only {no}x in Notion"
+    seen_this_batch = set()
+
+    for code in upwork_codes:
+        prefix = code[:2].upper()
+        task_code = role.task_codes.get(prefix)
+        label = task_code.label if task_code else ""
+
+        if code in seen_this_batch:
+            status, detail = "mismatch", "submitted more than once in this batch"
+        elif code in used_codes:
+            prior = used_codes[code]
+            status = "mismatch"
+            detail = f"already claimed by {prior.get('contractor', '?')} ({prior.get('period', '?')})"
+        elif code not in notion_codes:
+            status, detail = "mismatch", "no exact match in Notion for this contractor"
         else:
-            status, detail = "mismatch", f"{no}x completed in Notion, only {uw}x submitted on Upwork"
-        task_code = role.task_codes.get(code)
+            status, detail = "match", "verified against Notion"
+            used_codes[code] = {"contractor": contractor.name, "period": f"{date_from} to {date_to}"}
+
+        seen_this_batch.add(code)
         checks.append(
-            CodeCountCheck(
+            CodeCheck(
                 contractor=contractor.name,
                 date_from=date_from,
                 date_to=date_to,
                 code=code,
-                label=task_code.label if task_code else "",
-                upwork_count=uw,
-                notion_count=no,
+                label=label,
                 status=status,
                 detail=detail,
             )
@@ -112,12 +113,20 @@ def _check_code_counts(contractor, role, date_from, date_to, upwork_codes, notio
     return checks
 
 
-def reconcile_pod(pod, submissions, notion_records):
+def reconcile_pod(pod, submissions, notion_records, used_codes):
     """submissions may include rows for contractors outside this pod (the
     same CSV covers everyone) — those are silently skipped here, not
     reported as unknown. Call unknown_handles() separately across all pods
-    to catch handles that aren't anyone's."""
+    to catch handles that aren't anyone's.
+
+    used_codes: this pod's ledger (see ledger.py), mutated in place with
+    any newly verified code — the caller is responsible for persisting it
+    after this returns."""
     by_handle = {c.upwork_handle: c for c in pod.contractors}
+
+    notion_codes_by_contractor = defaultdict(set)
+    for r in notion_records:
+        notion_codes_by_contractor[r.contractor].add(r.task_code)
 
     result = PodReconciliation()
     by_contractor_period = defaultdict(list)  # (contractor, date_from, date_to) -> [submission, ...]
@@ -134,7 +143,8 @@ def reconcile_pod(pod, submissions, notion_records):
     for (contractor, date_from, date_to), period_submissions in by_contractor_period.items():
         role = pod.roles[contractor.role]
         codes = [code for s in period_submissions for code in s.codes]
-        result.code_checks.extend(_check_code_counts(contractor, role, date_from, date_to, codes, notion_records))
+        notion_codes = notion_codes_by_contractor.get(contractor.name, set())
+        result.code_checks.extend(_check_codes(contractor, role, date_from, date_to, codes, notion_codes, used_codes))
 
     return result
 

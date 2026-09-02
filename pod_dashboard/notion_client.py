@@ -47,16 +47,19 @@ class NotionClient:
     def query_task_records(self, database_id, property_map):
         """property_map maps our field names (contractor, task_code, date) to
         this database's actual Notion property names, since schemas vary per
-        brand — see pods.yaml. Expected duration for a task code comes from
-        pods.yaml's task_codes, not from Notion — this is just the log of
-        which coded tasks were completed, by whom, and when."""
+        brand — see pods.yaml. task_code is the full code Notion generated
+        for that task (e.g. "TB11426081516482608251636"), pulled verbatim —
+        this is the master list a contractor's Upwork submission gets
+        checked against for an exact match. Expected duration for a task
+        code's two-letter prefix still comes from pods.yaml's task_codes,
+        not from Notion."""
         records = []
         for page in self._query_database_pages(database_id):
             props = page["properties"]
             records.append(
                 NotionTaskRecord(
                     contractor=_extract_text(props.get(property_map["contractor"])),
-                    task_code=_extract_text(props.get(property_map["task_code"])).strip().upper(),
+                    task_code=_extract_text(props.get(property_map["task_code"])).strip(),
                     date=_extract_date(props.get(property_map["date"])),
                 )
             )

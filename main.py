@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from pod_dashboard.config import PodConfigError, load_pods, load_roles, load_secrets
+from pod_dashboard.ledger import load_used_codes, save_used_codes
 from pod_dashboard.notion_client import NotionClient
 from pod_dashboard.page import render_index_page, render_pod_page
 from pod_dashboard.reconcile import reconcile_pod, unknown_handles as find_unknown_handles
@@ -16,7 +17,11 @@ def run_for_pod(pod, submissions, notion_client):
     notion_records = []
     for brand in pod.brands:
         notion_records.extend(notion_client.query_task_records(brand.notion_database_id, brand.notion_property_map))
-    return reconcile_pod(pod, submissions, notion_records)
+
+    used_codes = load_used_codes(pod.slug)
+    reconciliation = reconcile_pod(pod, submissions, notion_records, used_codes)
+    save_used_codes(pod.slug, used_codes)  # reconcile_pod mutates used_codes with any newly verified code
+    return reconciliation
 
 
 def main():
@@ -59,7 +64,7 @@ def main():
             (pod_dir / "index.html").write_text(render_pod_page(pod, reconciliation, all_pods, roles, unknown))
             hours_mismatches = sum(1 for c in reconciliation.hours_checks if c.status == "mismatch")
             code_mismatches = sum(1 for c in reconciliation.code_checks if c.status == "mismatch")
-            print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code-count mismatches")
+            print(f"[{pod.name}] {hours_mismatches} hours mismatches, {code_mismatches} code mismatches")
             succeeded.append(pod.name)
         except Exception as e:
             print(f"[{pod.name}] FAILED: {e}", file=sys.stderr)

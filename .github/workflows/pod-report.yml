@@ -12,6 +12,9 @@ concurrency:
   group: pod-report
   cancel-in-progress: false
 
+permissions:
+  contents: write # needed to commit used_codes/ back to the repo
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -34,6 +37,17 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           PYTHONUNBUFFERED: "1"
+
+      # main.py updates used_codes/{slug}.json with any newly verified code,
+      # so a future run knows it's already been claimed — see ledger.py.
+      # Notion itself is never written to, so this file is the only record.
+      - name: Commit updated code ledger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add used_codes/
+          git diff --staged --quiet || git commit -m "Update used-code ledger from report run"
+          git push
 
       - name: Deploy to Netlify
         run: npx --yes netlify-cli deploy --prod --dir=output
