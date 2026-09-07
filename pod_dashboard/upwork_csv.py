@@ -33,7 +33,10 @@ def _extract_handle(talent):
 
 
 def _parse_memo(memo):
-    codes = [m.group(0) for m in STAMP_RE.finditer(memo)]
+    # Notion generates codes uppercase; a contractor typing one into Upwork's
+    # memo field by hand could easily vary in case, which would otherwise
+    # fail reconcile.py's exact-match check for no visible reason.
+    codes = [m.group(0).upper() for m in STAMP_RE.finditer(memo)]
     # Whatever's left after removing every matched stamp is free text the
     # contractor typed instead of (or alongside) a code stamp — worth
     # surfacing, since it's real logged time with no code to check it against.
