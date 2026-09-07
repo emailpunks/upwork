@@ -137,8 +137,8 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, 
 <h1>{escape(pod.name)}</h1>
 {unknown_warning}
 
-<section class="card">
-  <h2>Brands</h2>
+<details class="card">
+  <summary><h2 style="display:inline">Brands</h2></summary>
   <p class="muted">Notion databases this pod's codes get checked against.</p>
   <div id="brands-list">
 {brands_html}
@@ -152,7 +152,7 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, 
   </div>
   <p class="muted">If the brand name already exists, these database IDs are added to it rather than replacing it.</p>
   <p id="brand-save-status" class="muted"></p>
-</section>
+</details>
 
 <section class="card">
   <h2>Timesheet CSV</h2>
