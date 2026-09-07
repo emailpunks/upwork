@@ -1,16 +1,15 @@
-"""Two kinds of page, both password-gated: a landing page (pod navigation +
-the GitHub token, which is shared across pods via localStorage) and one
-page per pod (Brands, CSV drop zone + unassigned-handle assignment, Run
-Report, that pod's reconciliation tables, a cutoff date, and the Notion
-master list).
+"""Two kinds of page, both password-gated: a landing page (just pod
+navigation) and one page per pod (GitHub access, Brands, CSV drop zone +
+unassigned-handle assignment, Run Report, that pod's reconciliation
+tables, a cutoff date, and the Notion master list).
 
 Deliberately NOT real security: the password gate is a client-side SHA-256
 comparison (trivially bypassable via view-source), and the pages' only real
 protection is (a) Netlify's own site-wide password, and (b) a GitHub token
-scoped to just this one repo's Contents/Actions APIs, entered once (on the
-landing page) and kept in the browser's localStorage only — shared across
-every pod page on this site since localStorage is per-origin, never written
-to the repo or bundled into the deployed source. Same mechanism as the
+scoped to just this one repo's Contents/Actions APIs, entered on any one
+pod page and kept in the browser's localStorage only — shared across every
+page on this site since localStorage is per-origin, never written to the
+repo or bundled into the deployed source. Same mechanism as the
 Weekly/Monthly dashboards' Admin pages, same password by choice.
 
 Every write (contractor assignment, brands, cutoff date) goes straight to
@@ -71,8 +70,9 @@ def _page_shell(title, app_body, script):
 
 
 def render_index_page(all_pods):
-    """Landing page: GitHub token (shared across every pod page via
-    localStorage) + links to each pod's own page."""
+    """Landing page: just links to each pod's own page — GitHub access
+    lives on each pod page now (still shared across all of them via
+    localStorage, since it's the same origin)."""
     pod_links = "\n".join(
         f'<a href="{escape(p.slug)}/">{escape(p.name)}</a>' for p in all_pods
     ) or '<p class="muted">No pods yet.</p>'
@@ -81,31 +81,11 @@ def render_index_page(all_pods):
 <h1>Pod Reconciliation</h1>
 <p class="muted">Upwork time submissions checked against Notion task records, by pod.</p>
 
-<section class="card">
-  <h2>GitHub access</h2>
-  <p class="muted">A token is required to save contractor assignments or run a new report from a pod's page — entered once here, kept only in this browser (never sent anywhere but GitHub, never written to the repo), shared across every pod page on this site.</p>
-  <details id="token-help">
-    <summary>How do I get a token?</summary>
-    <ol>
-      <li>Go to <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">github.com/settings/tokens/new</a> (classic token)</li>
-      <li>Give it a note (e.g. "pod dashboard") and an expiration</li>
-      <li>Under <strong>Select scopes</strong>, check <strong>repo</strong> (Full control of private repositories) and <strong>workflow</strong> — covers both saving assignments and the Run Report button on each pod's page</li>
-      <li>Generate the token and paste it below</li>
-    </ol>
-  </details>
-  <div class="row">
-    <input type="password" id="gh-token" placeholder="ghp_..." autocomplete="off" />
-    <button id="gh-token-save" class="btn">Save token</button>
-    <button id="gh-token-clear" class="btn btn-ghost">Clear</button>
-  </div>
-  <p id="gh-token-status" class="muted"></p>
-</section>
-
 <div class="card pod-list">
 {pod_links}
 </div>
 """
-    return _page_shell("Pod Reconciliation", app_body, TOKEN_JS)
+    return _page_shell("Pod Reconciliation", app_body, "")
 
 
 def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, notion_codes=None, used_codes=None):
@@ -136,6 +116,26 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, 
 <p class="muted"><a href="../">&larr; All pods</a></p>
 <h1>{escape(pod.name)}</h1>
 {unknown_warning}
+
+<details class="card">
+  <summary><h2 style="display:inline">GitHub access</h2></summary>
+  <p class="muted">A token is required to save contractor assignments or run a new report — entered once on any pod page, kept only in this browser (never sent anywhere but GitHub, never written to the repo), shared across every page on this site.</p>
+  <details id="token-help">
+    <summary>How do I get a token?</summary>
+    <ol>
+      <li>Go to <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">github.com/settings/tokens/new</a> (classic token)</li>
+      <li>Give it a note (e.g. "pod dashboard") and an expiration</li>
+      <li>Under <strong>Select scopes</strong>, check <strong>repo</strong> (Full control of private repositories) and <strong>workflow</strong> — covers both saving assignments and the Run Report button on each pod's page</li>
+      <li>Generate the token and paste it below</li>
+    </ol>
+  </details>
+  <div class="row">
+    <input type="password" id="gh-token" placeholder="ghp_..." autocomplete="off" />
+    <button id="gh-token-save" class="btn">Save token</button>
+    <button id="gh-token-clear" class="btn btn-ghost">Clear</button>
+  </div>
+  <p id="gh-token-status" class="muted"></p>
+</details>
 
 <details class="card">
   <summary><h2 style="display:inline">Brands</h2></summary>
@@ -213,7 +213,7 @@ def render_pod_page(pod, reconciliation, all_pods, roles, unknown_handles=None, 
 {master_list_html}
 </details>
 """
-    script = ADMIN_JS.format(
+    script = TOKEN_JS + ADMIN_JS.format(
         admin_owner=GITHUB_OWNER,
         admin_repo=GITHUB_REPO,
         pods_json=pods_json,
@@ -355,8 +355,9 @@ GATE_JS = """
 """
 
 
-# Landing-page-only: the token input's save/clear/status UI. Reading the
-# token (getToken) is defined in GATE_JS since pod pages need it too.
+# The GitHub access card's save/clear/status UI, on every pod page.
+# Reading the token (getToken) is defined in GATE_JS instead, since it's
+# needed even on a pod page that hasn't loaded this script's DOM elements.
 TOKEN_JS = """
   var tokenInput = document.getElementById('gh-token');
   var tokenStatus = document.getElementById('gh-token-status');
@@ -586,7 +587,7 @@ ADMIN_JS = """
 
   document.getElementById('save-assignments-btn').addEventListener('click', function() {{
     var status = document.getElementById('save-status');
-    if (!getToken()) {{ status.innerHTML = '<span class="error">Set a GitHub token on the main page first.</span>'; return; }}
+    if (!getToken()) {{ status.innerHTML = '<span class="error">Set a GitHub token above first.</span>'; return; }}
 
     var podSelects = document.querySelectorAll('.pod-select');
     var byPod = {{}}; // slug -> [{{name, upwork_handle, role}}]
@@ -640,7 +641,7 @@ ADMIN_JS = """
   // ---- Brands ----
   document.getElementById('add-brand-btn').addEventListener('click', function() {{
     var status = document.getElementById('brand-save-status');
-    if (!getToken()) {{ status.innerHTML = '<span class="error">Set a GitHub token on the main page first.</span>'; return; }}
+    if (!getToken()) {{ status.innerHTML = '<span class="error">Set a GitHub token above first.</span>'; return; }}
 
     var name = document.getElementById('new-brand-name').value.trim();
     var ids = document.getElementById('new-brand-db-ids').value
@@ -671,7 +672,7 @@ ADMIN_JS = """
   // ---- Cutoff date ----
   document.getElementById('save-cutoff-btn').addEventListener('click', function() {{
     var statusEl = document.getElementById('cutoff-status');
-    if (!getToken()) {{ statusEl.innerHTML = '<span class="error">Set a GitHub token on the main page first.</span>'; return; }}
+    if (!getToken()) {{ statusEl.innerHTML = '<span class="error">Set a GitHub token above first.</span>'; return; }}
     var date = document.getElementById('cutoff-date-input').value;
     if (!date) {{ statusEl.textContent = 'Pick a date first.'; return; }}
 
@@ -755,7 +756,7 @@ ADMIN_JS = """
     var btn = this;
     var statusEl = document.getElementById('run-status');
     btn.disabled = true;
-    if (!getToken()) {{ statusEl.textContent = 'Set a GitHub token on the main page first.'; btn.disabled = false; return; }}
+    if (!getToken()) {{ statusEl.textContent = 'Set a GitHub token above first.'; btn.disabled = false; return; }}
     var csv = document.getElementById('csv-input').value;
     if (!csv.trim()) {{ statusEl.textContent = 'Drop or paste a CSV above first.'; btn.disabled = false; return; }}
 

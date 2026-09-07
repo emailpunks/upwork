@@ -127,12 +127,15 @@ no separate public dashboard and no separate hidden admin URL. Entering
 the password on any page unlocks every other page too (remembered in the
 browser), so it's only asked once per browser.
 
-- **Landing page** (`/`): lists every pod, and holds the GitHub personal
-  access token — entered once here, kept in the browser's local storage,
-  shared across every pod page on the site since it's the same origin.
+- **Landing page** (`/`): just lists every pod.
 - **Each pod's own page** (`/<slug>/`):
-  - **Brands** — add a brand by name plus one or more Notion database IDs
-    (one per line); adding the same brand name again appends new IDs to
+  - **GitHub access** (collapsed by default) — the personal access token
+    used to save assignments/brands/cutoff and trigger a report run.
+    Entered once on any pod page, kept in the browser's local storage,
+    shared across every page on the site since it's the same origin.
+  - **Brands** (collapsed by default) — add a brand by name plus one or
+    more Notion database IDs (one per line); adding the same brand name
+    again appends new IDs to
     it rather than replacing it. No YAML editing required, though the
     Notion integration still needs to be shared with each database first
     (see Setup above).
@@ -155,5 +158,5 @@ browser), so it's only asked once per browser.
 Assignments are written to `pod_data/{slug}.json` (one file per pod,
 merged with `pods.yaml` at build time — see `pod_dashboard/config.py`).
 The password is the same one as Weekly/Monthly's Admin pages (not real
-security, just a speed bump). See the landing page for how to generate the
-GitHub token.
+security, just a speed bump). See any pod page's GitHub access section for
+how to generate the token.
