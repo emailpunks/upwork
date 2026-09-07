@@ -66,6 +66,12 @@ master list. See `pod_dashboard/upwork_csv.py`.
    generated code (e.g. `TB11426081516482608251636`), not just the
    two-letter prefix — that's what gets checked against Upwork.
 
+Only the `notion_database_ids` you get from the Brands UI (or `pods.yaml`)
+are needed — a database can internally have more than one "data source"
+(Notion's 2025-09-03 model), and `notion_client.py` resolves and queries
+all of them for you. You don't need to go find a data source's own ID
+anywhere.
+
 ### 2. Fill in secrets
 
 Copy `pods.secrets.yaml.example` to `pods.secrets.yaml` (gitignored) and
