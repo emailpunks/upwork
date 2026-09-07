@@ -1,6 +1,8 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+from .notion_client import find_matching_code
+
 # How close a submission's total minutes has to be to what its code stamps
 # add up to, to still count as a match rather than an hours mismatch. Upwork
 # logs time in fractional hours, so a little rounding slack avoids flagging
@@ -77,9 +79,17 @@ def _check_codes(contractor, role, date_from, date_to, upwork_codes, notion_code
     """notion_codes: the full set of codes Notion has for this pod (the
     "master list") — there's no per-contractor assignment in Notion, so any
     pod member can legitimately submit any of these codes, just not the
-    same one twice. used_codes: this pod's whole ledger, keyed by code then
-    by contractor name (see ledger.py) — mutated in place with any newly
-    verified code, so the caller can save it back out."""
+    same one twice. A submitted code is matched against these with a small
+    tolerance on its embedded date/time (see notion_client.codes_match) —
+    Notion's API has been observed returning that time ~1 hour off from
+    what the same formula shows in Notion's own UI, a rendering quirk on
+    Notion's end, not a contractor typo — everything else about the code,
+    including its ID, still has to line up exactly. used_codes: this pod's
+    whole ledger, keyed by the canonical Notion code (not the as-submitted
+    one, so re-runs stay consistent even if the submitted time drifts a bit
+    from run to run) then by contractor name (see ledger.py) — mutated in
+    place with any newly verified code, so the caller can save it back
+    out."""
     checks = []
     seen_this_batch = set()
 
@@ -87,20 +97,22 @@ def _check_codes(contractor, role, date_from, date_to, upwork_codes, notion_code
         prefix = code[:2].upper()
         task_code = role.task_codes.get(prefix)
         label = task_code.label if task_code else ""
-        claimed_by = used_codes.get(code, {})
+        matched_notion_code = find_matching_code(code, notion_codes)
+        ledger_key = matched_notion_code or code
+        claimed_by = used_codes.get(ledger_key, {})
 
-        if code in seen_this_batch:
+        if ledger_key in seen_this_batch:
             status, detail = "mismatch", "submitted more than once in this batch"
         elif contractor.name in claimed_by:
             status = "mismatch"
             detail = f"you already claimed this code ({claimed_by[contractor.name]})"
-        elif code not in notion_codes:
+        elif not matched_notion_code:
             status, detail = "mismatch", "no exact match in the Notion master list"
         else:
             status, detail = "match", "verified against Notion"
-            used_codes.setdefault(code, {})[contractor.name] = f"{date_from} to {date_to}"
+            used_codes.setdefault(ledger_key, {})[contractor.name] = f"{date_from} to {date_to}"
 
-        seen_this_batch.add(code)
+        seen_this_batch.add(ledger_key)
         checks.append(
             CodeCheck(
                 contractor=contractor.name,

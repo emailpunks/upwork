@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 
@@ -29,23 +29,75 @@ NOTION_VERSION = "2025-09-03"
 _CODE_DATE_LEN = 10
 
 
-def code_created_date(code):
-    """Returns a datetime derived from a Notion-generated code's embedded
-    creation timestamp, or None if the code doesn't fit that shape (e.g. a
-    legacy-scheme code, which has no alphabetic brand suffix at all)."""
-    body = code[2:]  # drop the 2-letter task code prefix
+def _split_code(code):
+    """Splits a code's body (everything after the 2-letter prefix) into
+    (id_part, date_block, suffix). Returns (body, None, None) for a legacy
+    all-digit code with no brand suffix — there's no reliable place to draw
+    the id/date boundary without one."""
+    body = code[2:]
     i = len(body)
     while i > 0 and body[i - 1].isalpha():
         i -= 1
     if i == len(body) or i < _CODE_DATE_LEN:
-        return None  # no brand suffix at all (legacy scheme), or not enough left for a date block
-    date_block = body[i - _CODE_DATE_LEN : i]
-    if not date_block.isdigit():
+        return body, None, None
+    return body[: i - _CODE_DATE_LEN], body[i - _CODE_DATE_LEN : i], body[i:]
+
+
+def code_created_date(code):
+    """Returns a datetime derived from a Notion-generated code's embedded
+    creation timestamp, or None if the code doesn't fit that shape (e.g. a
+    legacy-scheme code, which has no alphabetic brand suffix at all)."""
+    _, date_block, _ = _split_code(code)
+    if date_block is None or not date_block.isdigit():
         return None
     try:
         return datetime.strptime(date_block, "%y%m%d%H%M")
     except ValueError:
         return None
+
+
+# Real-world codes for the same ticket have been observed differing by
+# exactly ~1 hour in their embedded date/time between what Notion's API
+# returns and what a person sees typing the same code from Notion's own
+# UI — looks like a timezone-rendering quirk in how the formula's date
+# gets computed (e.g. UTC vs. British Summer Time), not a contractor typo,
+# since the rest of the code (prefix, ID, brand suffix) matches exactly.
+# The embedded time still matters for matching — it's real signal, not
+# noise, so a match still requires it to be close, just not byte-identical.
+_TIME_TOLERANCE = timedelta(hours=2)
+
+
+def codes_match(submitted_code, notion_code):
+    """True if a code submitted on Upwork and a code pulled from Notion
+    refer to the same ticket: exact match on prefix, ID, and brand suffix,
+    and the embedded date/time within _TIME_TOLERANCE of each other (see
+    above) rather than requiring it byte-identical. Legacy all-digit codes
+    (no brand suffix to anchor a split on) fall back to a plain exact
+    match, since there's no reliable id/date boundary to compare piecewise."""
+    if submitted_code[:2].upper() != notion_code[:2].upper():
+        return False
+    sub_id, sub_date, sub_suffix = _split_code(submitted_code)
+    notion_id, notion_date, notion_suffix = _split_code(notion_code)
+    if sub_date is None or notion_date is None:
+        return submitted_code == notion_code
+    if sub_id != notion_id or sub_suffix != notion_suffix:
+        return False
+    try:
+        sub_dt = datetime.strptime(sub_date, "%y%m%d%H%M")
+        notion_dt = datetime.strptime(notion_date, "%y%m%d%H%M")
+    except ValueError:
+        return submitted_code == notion_code
+    return abs(sub_dt - notion_dt) <= _TIME_TOLERANCE
+
+
+def find_matching_code(submitted_code, notion_codes):
+    """Returns whichever code in notion_codes matches submitted_code (see
+    codes_match), or None. notion_codes should be small enough (per-pod
+    master list, not the whole workspace) that a linear scan is fine."""
+    for notion_code in notion_codes:
+        if codes_match(submitted_code, notion_code):
+            return notion_code
+    return None
 
 
 def drop_codes_before(records, cutoff_date):
